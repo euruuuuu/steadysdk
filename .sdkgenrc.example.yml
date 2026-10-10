@@ -31,6 +31,28 @@ typescript:
   # Extension in relative imports: .js (Node ESM + bundlers), .ts (Deno, Bun,
   # allowImportingTsExtensions), or none (bundler resolution).
   importExtension: .js
+  # Emit `// <sdkgen:custom name>` ... `// </sdkgen:custom>` regions in generated files (imports and class
+  # members of each API class, extra declarations in models.ts). Code you put inside them is kept when the
+  # SDK is regenerated; edits anywhere else are still reported as conflicts.
+  customRegions: true
+
+# Leave parts of the API out of the SDK. Patterns: `*` matches within a path segment (or any characters in a
+# name), `**` matches across path segments. Entries that match nothing are reported, so typos surface.
+ignore:
+  operations: []           # ["DELETE /users/{id}", "* /admin/**", "legacy*"]  (METHOD /path, or operationId)
+  paths: []                # ["/internal/**"]
+  tags: []                 # [internal]
+  schemas: []              # ["Legacy*"]  (references from kept operations become `unknown`)
+  # Also leave out component schemas that no kept operation uses.
+  unusedSchemas: false
+
+templates:
+  # Your copy of the HTTP runtime, used instead of the built-in generated/runtime.ts. Create it with
+  # `sdkgen eject runtime`; sdkgen checks it still exports what the generated code imports.
+  # runtime: ./sdkgen/runtime.ts
+  # Comment lines placed at the top of every generated file. Placeholders: {title}, {version}.
+  # header: |
+  #   // Copyright (c) Example Corp. Licensed under the MIT license.
 
 naming:
   # Words kept in a fixed form, matched case-insensitively. With [ID, API]:

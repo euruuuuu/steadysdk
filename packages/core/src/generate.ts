@@ -7,7 +7,9 @@ import { diffModels } from './diff/diff.js';
 import type { ApiDiff } from './diff/types.js';
 import { SdkgenError } from './errors.js';
 import { generateTypeScript } from './generators/typescript/index.js';
+import { loadRuntime } from './generators/typescript/templates.js';
 import { buildModel } from './ir/build.js';
+import { applyIgnore } from './ir/ignore.js';
 import type { ApiModel } from './ir/model.js';
 import type { SdkNames } from './naming/assign.js';
 import { readNameLock, serializeNameLock, type NameLock } from './naming/lock.js';
@@ -20,7 +22,7 @@ import {
   serializeManifest,
   type Manifest,
 } from './output/manifest.js';
-import { applyPlan, planOutput, type OutputPlan, type PlanFile } from './output/plan.js';
+import { applyPlan, describeConflict, planOutput, type OutputPlan, type PlanFile } from './output/plan.js';
 import { loadSpec, type LoadedSpec } from './spec/load.js';
 import { sha256 } from './util/hash.js';
 import { SDKGEN_VERSION } from './version.js';
@@ -54,10 +56,11 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   const diagnostics = new Diagnostics();
 
   const spec = await loadSpec(config.inputPath, { validate: config.validate });
-  const model = buildModel(spec.document, diagnostics);
+  const model = applyIgnore(buildModel(spec.document, diagnostics), config.ignore, diagnostics);
 
   // Read before anything is written: the snapshot is about to be replaced by the current spec.
-  const baseline = await readBaseline(config.outputDir, diagnostics);
+  // The ignore list applies to both sides, so the changes match what the SDK contains.
+  const baseline = await readBaseline(config, diagnostics);
   const changes = baseline ? diffModels(baseline, model) : undefined;
 
   const previous = await readManifest(config.outputDir);
@@ -74,7 +77,8 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
     }
   }
 
-  const output = await generateTypeScript({ model, config, lock, diagnostics });
+  const runtimeSource = config.runtimeTemplatePath === undefined ? undefined : await loadRuntime(config.runtimeTemplatePath, diagnostics);
+  const output = await generateTypeScript({ model, config, lock, diagnostics, runtimeSource });
 
   const owned = output.files.filter((file) => file.ownership === 'generated');
   const manifest: Manifest = {
@@ -97,10 +101,8 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   if (!options.dryRun) {
     if (plan.conflicts.length > 0 && !options.force) {
       throw new SdkgenError('OUTPUT_CONFLICT', 'Refusing to overwrite files that sdkgen did not write', {
-        details: plan.conflicts.map((conflict) =>
-          conflict.reason === 'edited' ? `${conflict.path} (edited since the last generation)` : `${conflict.path} (not created by sdkgen)`,
-        ),
-        hint: 'Move custom code out of generated/ (e.g. into client.ts), or re-run with --force to overwrite.',
+        details: plan.conflicts.map(describeConflict),
+        hint: 'Keep custom code in a `// <sdkgen:custom>` region or outside generated/ (e.g. in client.ts), or re-run with --force to overwrite.',
       });
     }
     await applyPlan(plan);
@@ -109,10 +111,10 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   return { spec, model, names: output.names, plan, changes, written: !options.dryRun, diagnostics: diagnostics.items };
 }
 
-async function readBaseline(outputDir: string, diagnostics: Diagnostics): Promise<ApiModel | undefined> {
+async function readBaseline(config: ResolvedConfig, diagnostics: Diagnostics): Promise<ApiModel | undefined> {
   try {
-    const snapshot = await loadSpecSnapshot(outputDir);
-    return snapshot && buildModel(snapshot.document);
+    const snapshot = await loadSpecSnapshot(config.outputDir);
+    return snapshot && applyIgnore(buildModel(snapshot.document), config.ignore);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     diagnostics.warn('SPEC_SNAPSHOT_INVALID', `Ignoring unreadable ${SPEC_SNAPSHOT_FILE} (${reason}); API changes are not listed for this run.`);

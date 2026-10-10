@@ -24,6 +24,8 @@ export interface ResolvedConfig extends SdkgenConfig {
   inputPath: string;
   /** Absolute output directory. */
   outputDir: string;
+  /** Absolute path of `templates.runtime`, when set. */
+  runtimeTemplatePath: string | undefined;
 }
 
 export interface LoadConfigOptions {
@@ -77,11 +79,12 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
     rootDir,
     inputPath: absolutize(rootDir, config.input),
     outputDir: path.resolve(rootDir, config.output),
+    runtimeTemplatePath: config.templates.runtime === undefined ? undefined : path.resolve(rootDir, config.templates.runtime),
   };
 }
 
 export function parseConfig(value: unknown, source = 'config'): SdkgenConfig {
-  const result = configSchema.safeParse(value);
+  const result = configSchema.safeParse(withoutNulls(value));
   if (!result.success) {
     throw new SdkgenError('CONFIG_INVALID', `Invalid sdkgen config (${source})`, {
       details: formatIssues(result.error.issues),
@@ -119,6 +122,16 @@ function formatIssues(issues: readonly z.core.$ZodIssue[]): string[] {
     const where = issue.path.length > 0 ? issue.path.map(String).join('.') : '(root)';
     return `${where}: ${issue.message}`;
   });
+}
+
+/** YAML reads a key whose options are all commented out (`templates:`) as null; treat that as unset. */
+function withoutNulls(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => item !== null)
+      .map(([key, item]) => [key, withoutNulls(item)]),
+  );
 }
 
 function absolutize(base: string, target: string): string {

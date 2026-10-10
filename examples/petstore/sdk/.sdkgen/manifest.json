@@ -1,11 +1,11 @@
 {
   "files": {
-    "generated/api/pets.ts": "87d95921f5126be405d92562db7546d31778fae0dc79584d26f25eb501a22457",
-    "generated/api/store.ts": "14517973d4e127a344c28c3702845a8abc0bfb1e3be3e5ba9f716d38199f29d6",
-    "generated/api/users.ts": "aa5e51a90e64175ffa069ad07b7bc1137bde7e5766366dd7b785fa3f4afb689b",
+    "generated/api/pets.ts": "a9a13af4b0254d4b4a3e9c44242662c3d8cf16e34c7b18634b00db76e8bebb46",
+    "generated/api/store.ts": "8d52bb15b709ab25c5c53672a568b0b78357f741d4ae320fe8b2ebba10a284b6",
+    "generated/api/users.ts": "3d0c40c8b635fbe77c849f8aa6ce10219dcb45d8934128aa86c4adbacde3c5bd",
     "generated/client.ts": "20bf3f46a3dfbb40803dc8f520355b6e74e82c6f772216e834284803ca0c0856",
     "generated/index.ts": "0642314acf6d062d4211a4a220b9f97ccb2fd4beca86e59c7914910407eec8ce",
-    "generated/models.ts": "3ec6b66bc93f56675b1fad2b3c8df936985d6d78d3e772ec4f383c59a31a3f85",
+    "generated/models.ts": "6c8a7ce91a474738ff0d3c015a6aa4ecd3cfff9cbac57938ad8ef0adc1bcc5e0",
     "generated/runtime.ts": "ea6a46612a60003d2b29e534a524ceb7cfc3e067ed775d39e732c178beed6011"
   },
   "generator": {

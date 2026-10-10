@@ -10,7 +10,10 @@ export type SdkgenErrorCode =
   | 'BASELINE_NOT_FOUND'
   | 'NAMING_INVALID'
   | 'OUTPUT_UNSAFE'
-  | 'OUTPUT_CONFLICT';
+  | 'OUTPUT_CONFLICT'
+  | 'TEMPLATE_NOT_FOUND'
+  | 'TEMPLATE_INVALID'
+  | 'FILE_EXISTS';
 
 export interface SdkgenErrorOptions {
   hint?: string;

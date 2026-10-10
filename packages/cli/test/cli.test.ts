@@ -229,4 +229,41 @@ describe('sdkgen CLI', () => {
       expect(JSON.parse(await readFile(path.join(dir, 'api.json'), 'utf8'))).toMatchObject({ version: 1, summary: { breaking: 5 } });
     });
   });
+
+  describe('eject', () => {
+    it('copies the runtime into the project and shows how to use it', async () => {
+      const dir = await project();
+      const result = await sdkgen(dir, 'eject', 'runtime');
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('Copied the built-in runtime template to sdkgen/runtime.ts');
+      expect(result.stdout).toContain('add this to .sdkgenrc.yml:\n  templates:\n    runtime: ./sdkgen/runtime.ts');
+      expect(await readFile(path.join(dir, 'sdkgen/runtime.ts'), 'utf8')).toMatch(/^\/\/ Your copy of the sdkgen HTTP runtime.*fingerprint [0-9a-f]{12}/);
+
+      const again = await sdkgen(dir, 'eject', 'runtime');
+      expect(again.code).toBe(1);
+      expect(again.stderr).toContain('sdkgen/runtime.ts already exists');
+      expect((await sdkgen(dir, 'eject', 'runtime', '--force')).code).toBe(0);
+    });
+
+    it('writes to templates.runtime when the config sets it, and generate picks it up', async () => {
+      const dir = await project();
+      const config = path.join(dir, '.sdkgenrc.yml');
+      await writeFile(config, `${await readFile(config, 'utf8')}\ntemplates:\n  runtime: ./custom/runtime.ts\n`);
+      const result = await sdkgen(dir, 'eject', 'runtime');
+      expect(result.stdout).toContain('Copied the built-in runtime template to custom/runtime.ts');
+      expect(result.stdout).toContain('sdkgen uses it for generated/runtime.ts from the next run on.');
+      const runtime = path.join(dir, 'custom/runtime.ts');
+      await writeFile(runtime, `${await readFile(runtime, 'utf8')}\nexport const CUSTOMIZED = true;\n`);
+      expect((await sdkgen(dir, 'generate')).code).toBe(0);
+      expect(await readFile(path.join(dir, 'sdk/generated/runtime.ts'), 'utf8')).toContain('export const CUSTOMIZED = true;');
+    });
+
+    it('prints the template with --stdout and rejects unknown templates', async () => {
+      const dir = await tempDir();
+      expect((await sdkgen(dir, 'eject', 'runtime', '--stdout')).stdout).toContain('export class HttpClient');
+      const unknown = await sdkgen(dir, 'eject', 'models');
+      expect(unknown.code).toBe(1);
+      expect(unknown.stderr).toContain("value 'models' is invalid for argument 'template'. Allowed choices are runtime.");
+    });
+  });
 });

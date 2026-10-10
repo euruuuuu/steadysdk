@@ -11,6 +11,7 @@ export {
   DEFAULT_ACTION_WORDS,
   type CaseStyle,
   type NamingConfig,
+  type IgnoreConfig,
   type SdkgenConfig,
   type SdkgenConfigInput,
 } from './config/schema.js';
@@ -25,6 +26,7 @@ export { renderChangelog, serializeDiff, diffTitle, changeSubject } from './diff
 export { loadSpecSnapshot } from './diff/baseline.js';
 export { DIFF_FORMAT_VERSION, type ApiDiff, type Change, type ChangeKind, type ChangeScope } from './diff/types.js';
 export { generateTypeScript, type GeneratorOutput, type TypeScriptGeneratorInput } from './generators/typescript/index.js';
+export { ejectTemplate, builtinRuntime, loadRuntime, TEMPLATE_NAMES, type TemplateName } from './generators/typescript/templates.js';
 export type { GeneratedFile, FileOwnership } from './generators/types.js';
 export {
   MANIFEST_FILE,
@@ -35,5 +37,7 @@ export {
   type Manifest,
   type ReadManifestResult,
 } from './output/manifest.js';
-export { planOutput, applyPlan, hasChanges, type OutputPlan, type PlannedChange, type FileAction, type Conflict } from './output/plan.js';
+export { planOutput, applyPlan, hasChanges, describeConflict, type OutputPlan, type PlannedChange, type FileAction, type Conflict } from './output/plan.js';
+export { parseRegions, stripRegions, mergeRegions, type ParsedRegions, type MergedRegions } from './output/regions.js';
+export { applyIgnore } from './ir/ignore.js';
 export { SDKGEN_VERSION } from './version.js';

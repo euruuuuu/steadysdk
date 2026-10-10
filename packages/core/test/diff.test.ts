@@ -1,20 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parse as parseYaml } from 'yaml';
 import { diffModels } from '../src/diff/diff.js';
 import { renderChangelog, serializeDiff } from '../src/diff/render.js';
 import type { ApiDiff } from '../src/diff/types.js';
 import { buildModel } from '../src/ir/build.js';
-import type { ApiModel } from '../src/ir/model.js';
-import { loadSpec, type OpenApiDocument } from '../src/spec/load.js';
-import { PETSTORE_DIR } from './helpers.js';
-
-/** A model from a YAML fragment of an OpenAPI document (`paths`, `components`, ...). */
-function api(yaml: string): ApiModel {
-  const doc = { openapi: '3.0.3', info: { title: 'Test', version: '1.0.0' }, paths: {}, ...(parseYaml(yaml) as object) };
-  return buildModel(doc as OpenApiDocument);
-}
+import { loadSpec } from '../src/spec/load.js';
+import { apiModel as api, PETSTORE_DIR } from './helpers.js';
 
 function diff(from: string, to: string): ApiDiff {
   return diffModels(api(from), api(to));

@@ -1,4 +1,4 @@
-import { generate, hasChanges, loadConfig, MANIFEST_FILE, type FileAction, type OutputPlan } from '@sdkgen/core';
+import { describeConflict, generate, hasChanges, loadConfig, MANIFEST_FILE, type FileAction, type OutputPlan } from '@sdkgen/core';
 import { printChanges } from '../changes.js';
 import type { Ui } from '../ui.js';
 
@@ -55,7 +55,7 @@ export async function generateCommand(ui: Ui, options: GenerateCommandOptions): 
     ui.info(`Dry run: nothing was written ${ui.c.dim(`(${elapsed} ms)`)}`);
     if (plan.conflicts.length > 0 && !options.force) {
       ui.warn('A real run would stop here: these files were changed outside sdkgen (use --force to overwrite):');
-      for (const conflict of plan.conflicts) ui.line(`    ${conflict.path}`);
+      for (const conflict of plan.conflicts) ui.line(`    ${describeConflict(conflict)}`);
     }
   } else {
     ui.success(`SDK written to ${ui.c.bold(ui.rel(plan.outputDir))} ${ui.c.dim(`(${elapsed} ms)`)}`);
@@ -97,7 +97,7 @@ function reportCheck(ui: Ui, plan: OutputPlan): number {
       ui.io.stderr(`  ${SYMBOLS[change.action]} ${change.path}\n`);
     }
   }
-  for (const conflict of plan.conflicts) ui.io.stderr(`  ! ${conflict.path} (changed outside sdkgen)\n`);
+  for (const conflict of plan.conflicts) ui.io.stderr(`  ! ${describeConflict(conflict)}\n`);
   return 1;
 }
 

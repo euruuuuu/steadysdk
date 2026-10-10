@@ -10,7 +10,7 @@ tenth and hundredth generation.
 | --- | --- | --- |
 | First generation | Works | Works |
 | API adds an endpoint | Rewrites everything | Adds the new method; every other file is untouched |
-| You wrote a custom helper | Gets deleted | Lives outside `generated/`, never touched |
+| You wrote a custom helper | Gets deleted | Lives in your own file or a custom region; kept on every run |
 | Someone hand-edits generated code | Silently overwritten | Detected; regeneration stops and tells you |
 | An `operationId` is renamed upstream | Your method is renamed (breaking) | Name pinned by the lock file until you opt in |
 | The API changes | You diff the YAML by hand | `sdkgen diff` lists every change and marks the breaking ones |
@@ -18,9 +18,9 @@ tenth and hundredth generation.
 | Naming conventions | Generator's choice, drifts | Your rules, in config, applied every time |
 | CI | — | `generate --check` fails when the SDK is stale; `diff --fail-on-breaking` on breaking changes |
 
-> **Status:** early development. Generation, naming rules, safe regeneration, the name lock and the API
-> changelog with breaking-change detection work today. Watch mode, CI gating on version bumps and the VS Code
-> extension are next (see [Roadmap](#roadmap)).
+> **Status:** early development. Generation, naming rules, safe regeneration, the name lock, custom regions,
+> ignore lists, template overrides and the API changelog with breaking-change detection work today. Watch mode,
+> CI gating on version bumps and the VS Code extension are next (see [Roadmap](#roadmap)).
 
 ## Quick start
 
@@ -49,7 +49,7 @@ See [`examples/petstore/sdk`](examples/petstore/sdk) for real output.
 
 ```
 sdk/
-├── generated/            ← owned by sdkgen, rewritten on every run. Don't edit.
+├── generated/            ← owned by sdkgen, rewritten on every run. Edit only inside custom regions.
 │   ├── runtime.ts        fetch wrapper: auth, query/path/header serialization, errors, timeouts, hooks
 │   ├── models.ts         one type per components.schemas entry
 │   ├── api/pets.ts       one class per tag: PetsApi with listPets(), createPet(), ...
@@ -68,8 +68,8 @@ and cookie parameters, and is optional when nothing in it is required.
 
 ## Maintenance model
 
-**Your code lives next to the generated code, not inside it.** `client.ts` and `index.ts` are scaffolded once
-and never touched again, so this survives every regeneration:
+**Your code lives next to the generated code.** `client.ts` and `index.ts` are scaffolded once and never touched
+again, so this survives every regeneration:
 
 ```ts
 // sdk/client.ts
@@ -83,10 +83,35 @@ export class PetstoreClient extends GeneratedClient {
 }
 ```
 
+**Or inside it, in custom regions.** Some code belongs in a generated class, for example a helper on `PetsApi`,
+which `GeneratedClient` creates for you. Generated files have named regions for that: the imports and the class
+body of each API file, and extra declarations at the end of `models.ts`. Code between the markers is carried
+into every new version of the file:
+
+```ts
+// sdk/generated/api/pets.ts
+export class PetsApi {
+  // ...generated methods...
+
+  // <sdkgen:custom members>
+  async findAvailablePet(name: string, options?: RequestOptions): Promise<Pet | undefined> {
+    const pets = await this.listPets({ status: ['available'] }, options);
+    return pets.find((pet) => pet.name === name);
+  }
+  // </sdkgen:custom>
+}
+```
+
+The committed [Petstore example](examples/petstore/sdk/generated/api/pets.ts) carries this helper through every
+regeneration. If a region with code in it would disappear, for example because its tag was removed from the
+spec, `generate` stops instead of dropping the code. It also stops if the markers are broken. Set
+`typescript.customRegions: false` to generate files without regions.
+
 **Hand edits to generated code are detected, never silently lost.** The manifest records a hash of each file
-sdkgen wrote. If a generated file changed since then, `sdkgen generate` stops and lists it; move the change
-out of `generated/`, or pass `--force` to overwrite it. Files that are no longer generated (say, a removed
-tag) are deleted, unless they were edited, in which case they are kept and reported.
+sdkgen wrote, with custom regions left out. If a generated file changed outside its regions since then,
+`sdkgen generate` stops and lists it. Move the change into a region or out of `generated/`, or pass `--force` to
+overwrite it. Files that are no longer generated (say, a removed tag) are deleted, unless they were edited or
+hold region code, in which case they are kept and reported.
 
 **Names stay put.** Every name sdkgen assigns is recorded in `.sdkgen/names.lock.json` and reused on the
 next run. Concretely:
@@ -170,6 +195,52 @@ request bodies, authentication requirements, security schemes and the default se
 Documentation-only edits are ignored. Validation keywords (`maxLength`, `pattern`, `minimum`, ...) are not
 compared yet.
 
+## Leaving parts of the API out
+
+Internal, admin or legacy endpoints don't have to end up in the SDK:
+
+```yaml
+ignore:
+  paths: ['/internal/**', '/admin/**']      # `*` stays within a segment, `**` crosses segments
+  operations: ['DELETE /users/{id}', 'legacy*']   # METHOD /path, or operationId
+  tags: [internal]
+  schemas: ['Legacy*']                      # references from kept operations become `unknown`
+  unusedSchemas: true                       # also drop schemas that no kept operation uses
+```
+
+An entry that matches nothing is reported as a warning, so typos and entries left over from an older spec
+surface. The ignore list also applies to the changes `generate` lists, and to `sdkgen diff` and `changelog`
+whenever they read the config (that is, unless you pass both spec files). Changes to endpoints the SDK leaves
+out are not reported.
+
+## Customizing the generated code
+
+**Your own HTTP runtime.** Every generated client goes through `generated/runtime.ts`, a dependency-free `fetch`
+wrapper. To change it (retries, a different HTTP library, tracing), copy it into your project and point the
+config at your copy:
+
+```bash
+sdkgen eject runtime          # writes ./sdkgen/runtime.ts and prints the config line to add
+```
+
+```yaml
+templates:
+  runtime: ./sdkgen/runtime.ts
+```
+
+sdkgen then uses your copy instead of the built-in runtime. If your copy no longer exports something the generated
+code imports, `generate` lists exactly what is missing. The copy records which version of the built-in runtime it
+started from, so when a newer sdkgen ships a changed runtime, `generate` warns you to review it
+(`sdkgen eject runtime --stdout` prints the current one).
+
+**A header for every file**, such as a license notice:
+
+```yaml
+templates:
+  header: |
+    // Copyright (c) Example Corp. {title} API client, generated for API version {version}.
+```
+
 ## Naming conventions
 
 Everything is driven by `.sdkgenrc.yml`; [`.sdkgenrc.example.yml`](.sdkgenrc.example.yml) documents every
@@ -220,6 +291,7 @@ sdkgen generate    [-c config] [-i spec] [-o dir] [--dry-run] [--check] [--reloc
                    [--no-validate] [--verbose]
 sdkgen diff        [old] [new] [-c config] [-i spec] [--json] [--fail-on-breaking] [--no-validate]
 sdkgen changelog   [old] [new] [-c config] [-i spec] [--json] [--out file] [--no-validate]
+sdkgen eject       runtime [-c config] [--out file] [--stdout] [--force]
 global:            [-C, --cwd dir] [--no-color]
 ```
 
@@ -245,8 +317,8 @@ and a hint.
 | --- | --- | --- |
 | A | Spec loading, model, naming engine, name lock, TypeScript generator, `init` / `generate` | ✅ Done |
 | B | Changelog & drift detection: `sdkgen diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
-| C | Maintenance: marker regions for partial updates, ignore lists, template overrides | Next |
-| D | `sdkgen watch`, CI gating on breaking changes without a version bump, GitHub Action | Planned |
+| C | Maintenance: custom regions in generated files, ignore lists, template overrides (`sdkgen eject`) | ✅ Done |
+| D | `sdkgen watch`, CI gating on breaking changes without a version bump, GitHub Action | Next |
 | E | VS Code extension (generate/diff commands, out-of-sync status bar), npm publish | Planned |
 
 ## Development

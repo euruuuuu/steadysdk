@@ -1,8 +1,9 @@
 import path from 'node:path';
-import { Command, CommanderError } from 'commander';
-import { SDKGEN_VERSION } from '@sdkgen/core';
+import { Argument, Command, CommanderError } from 'commander';
+import { SDKGEN_VERSION, TEMPLATE_NAMES } from '@sdkgen/core';
 import { changelogCommand, type ChangelogCommandOptions } from './commands/changelog.js';
 import { diffCommand, type DiffCommandOptions } from './commands/diff.js';
+import { ejectCommand, type EjectCommandOptions } from './commands/eject.js';
 import { generateCommand, type GenerateCommandOptions } from './commands/generate.js';
 import { initCommand, type InitCommandOptions } from './commands/init.js';
 import { defaultIo, Ui, type Io } from './ui.js';
@@ -84,6 +85,16 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .description('write the API changes as a Markdown changelog entry')
     .option('--out <file>', 'write to a file instead of stdout')
     .action(action<ChangelogCommandOptions>(changelogCommand));
+
+  program
+    .command('eject')
+    .description('copy a built-in template into your project to customize it')
+    .addArgument(new Argument('<template>', 'template to copy').choices(TEMPLATE_NAMES))
+    .option('-c, --config <file>', 'config file (default: nearest .sdkgenrc.yml)')
+    .option('--out <file>', 'where to write it (default: templates.<template> from the config, or ./sdkgen/<template>.ts)')
+    .option('--stdout', 'print it instead, e.g. to compare with your copy')
+    .option('-f, --force', 'replace an existing file')
+    .action(action<EjectCommandOptions>(ejectCommand));
 
   try {
     await program.parseAsync([...argv], { from: 'user' });

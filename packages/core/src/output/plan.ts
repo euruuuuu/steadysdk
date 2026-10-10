@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { FileOwnership } from '../generators/types.js';
 import { sha256 } from '../util/hash.js';
 import type { Manifest } from './manifest.js';
+import { mergeRegions, parseRegions, regionsWithCode, stripRegions } from './regions.js';
 
 /**
  * - `create` / `update` / `delete`: what the run will do to the file.
@@ -22,7 +23,28 @@ export interface PlannedChange {
 
 export interface Conflict {
   path: string;
-  reason: 'edited' | 'untracked';
+  /**
+   * - `edited`: changed outside custom regions since sdkgen wrote it.
+   * - `untracked`: at a generated path, but not written by sdkgen.
+   * - `region-removed`: custom regions with code that the new version of the file no longer has.
+   * - `regions-invalid`: custom region markers are unbalanced, so the user's code cannot be carried over.
+   */
+  reason: 'edited' | 'untracked' | 'region-removed' | 'regions-invalid';
+  /** Region names or the marker problem, for the region reasons. */
+  detail?: string | undefined;
+}
+
+export function describeConflict(conflict: Conflict): string {
+  switch (conflict.reason) {
+    case 'edited':
+      return `${conflict.path} (edited since the last generation)`;
+    case 'untracked':
+      return `${conflict.path} (not created by sdkgen)`;
+    case 'region-removed':
+      return `${conflict.path} (code in custom region ${conflict.detail} would be lost: the region is no longer generated)`;
+    case 'regions-invalid':
+      return `${conflict.path} (broken custom region markers: ${conflict.detail})`;
+  }
 }
 
 export interface OutputPlan {
@@ -56,16 +78,31 @@ export async function planOutput(outputDir: string, files: readonly PlanFile[], 
       changes.push({ path: file.path, action: 'create', ownership: file.ownership, content: file.content });
       continue;
     }
-    if (existing === file.content) {
+    let content = file.content;
+    let conflict: Conflict | undefined;
+    if (file.ownership === 'generated') {
+      // Code in custom regions moves into the new version of the file.
+      const parsed = parseRegions(existing);
+      if (parsed.ok) {
+        const merged = mergeRegions(file.content, parsed.regions);
+        content = merged.content;
+        if (merged.orphaned.length > 0) conflict = { path: file.path, reason: 'region-removed', detail: merged.orphaned.join(', ') };
+      } else {
+        conflict = { path: file.path, reason: 'regions-invalid', detail: parsed.error };
+      }
+    }
+    if (existing === content) {
       changes.push({ path: file.path, action: 'unchanged', ownership: file.ownership });
       continue;
     }
     if (file.ownership === 'generated') {
+      // The manifest hashes files with empty regions, so code inside regions is not an edit.
       const recorded = previous?.files[file.path];
-      if (recorded === undefined) conflicts.push({ path: file.path, reason: 'untracked' });
-      else if (recorded !== sha256(existing)) conflicts.push({ path: file.path, reason: 'edited' });
+      if (recorded === undefined) conflict = { path: file.path, reason: 'untracked' };
+      else if (!conflict && recorded !== sha256(stripRegions(existing))) conflict = { path: file.path, reason: 'edited' };
+      if (conflict) conflicts.push(conflict);
     }
-    changes.push({ path: file.path, action: 'update', ownership: file.ownership, content: file.content });
+    changes.push({ path: file.path, action: 'update', ownership: file.ownership, content });
   }
 
   // Files generated last time but not this time (a removed tag, ...): delete them unless edited by hand.
@@ -73,10 +110,16 @@ export async function planOutput(outputDir: string, files: readonly PlanFile[], 
     if (current.has(stale) || !isInside(outputDir, stale)) continue;
     const existing = await readIfExists(outputDir, stale);
     if (existing === undefined) continue;
-    if (sha256(existing) === hash) {
+    const parsed = parseRegions(existing);
+    const custom = parsed.ok ? regionsWithCode(parsed.regions) : [];
+    if (parsed.ok && sha256(stripRegions(existing)) === hash && custom.length === 0) {
       changes.push({ path: stale, action: 'delete', ownership: 'generated' });
     } else {
-      conflicts.push({ path: stale, reason: 'edited' });
+      conflicts.push(
+        parsed.ok && custom.length > 0 && sha256(stripRegions(existing)) === hash
+          ? { path: stale, reason: 'region-removed', detail: custom.join(', ') }
+          : { path: stale, reason: 'edited' },
+      );
       changes.push({ path: stale, action: 'keep', ownership: 'generated' });
     }
   }

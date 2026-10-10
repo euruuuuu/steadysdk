@@ -29,8 +29,14 @@ describe('config', () => {
     expect(exampleOperations).toEqual(operations);
   });
 
+  it('treats sections whose options are all commented out as unset', () => {
+    expect(parseConfig(parseYaml('input: x\ntemplates:\n  # runtime: ./runtime.ts\nclient:\n')).templates).toEqual({});
+  });
+
   it.each([
     [{ input: 'x', naming: { operations: { case: 'kebab' } } }, 'naming.operations.case'],
+    [{ input: 'x', templates: { header: 'Copyright Acme' } }, 'templates.header: Every line must be a comment'],
+    [{ input: 'x', ignore: { paths: [''] } }, 'ignore.paths.0'],
     [{ input: 'x', client: { groupby: 'tag' } }, 'client'],
     [{ input: 'x', naming: { operations: { stripPrefixes: ['(unclosed'] } } }, 'naming.operations.stripPrefixes.0: Invalid regular expression'],
     [{ output: './sdk' }, 'input'],

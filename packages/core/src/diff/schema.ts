@@ -1,4 +1,5 @@
 import type { ApiModel, EnumValue, ObjectSchema, Operation, Property, SchemaMeta, SchemaNode } from '../ir/model.js';
+import { reachability, refsOf } from '../ir/refs.js';
 import { capitalize, code } from './text.js';
 import type { ChangeKind } from './types.js';
 
@@ -393,27 +394,7 @@ export interface SchemaUsage {
 
 /** Which operations use each component schema, directly or through other components. */
 export function schemaUsage(model: ApiModel): Map<string, SchemaUsage> {
-  const components = new Map(model.schemas.map((named) => [named.key, named.schema]));
-  const closure = new Map<string, Set<string>>();
-  const reachable = (key: string): Set<string> => {
-    let result = closure.get(key);
-    if (result) return result;
-    result = new Set([key]);
-    closure.set(key, result);
-    const queue = [key];
-    while (queue.length > 0) {
-      const schema = components.get(queue.pop()!);
-      if (!schema) continue;
-      for (const ref of refsOf(schema)) {
-        if (!result.has(ref)) {
-          result.add(ref);
-          queue.push(ref);
-        }
-      }
-    }
-    return result;
-  };
-
+  const reachable = reachability(model);
   const usage = new Map<string, SchemaUsage>();
   const record = (node: SchemaNode, op: Operation, side: keyof SchemaUsage): void => {
     for (const ref of refsOf(node)) {
@@ -430,26 +411,4 @@ export function schemaUsage(model: ApiModel): Map<string, SchemaUsage> {
     for (const response of op.responses) for (const media of response.content) record(media.schema, op, 'response');
   }
   return usage;
-}
-
-function refsOf(node: SchemaNode, out: Set<string> = new Set()): Set<string> {
-  switch (node.kind) {
-    case 'ref':
-      out.add(node.target);
-      break;
-    case 'array':
-      refsOf(node.items, out);
-      break;
-    case 'object':
-      for (const property of node.properties) refsOf(property.schema, out);
-      if (typeof node.additionalProperties === 'object') refsOf(node.additionalProperties, out);
-      break;
-    case 'union':
-      for (const variant of node.variants) refsOf(variant, out);
-      break;
-    case 'intersection':
-      for (const part of node.parts) refsOf(part, out);
-      break;
-  }
-  return out;
 }

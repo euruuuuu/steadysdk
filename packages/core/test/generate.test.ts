@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config/load.js';
 import { generate } from '../src/generate.js';
+import { ejectTemplate } from '../src/generators/typescript/templates.js';
 import { NAME_LOCK_FILE } from '../src/output/manifest.js';
 import { FIXTURES, PETSTORE_DIR, REPO_ROOT, tempDir } from './helpers.js';
 
@@ -73,6 +74,14 @@ describe('examples/petstore', () => {
       const committed = await readFile(path.join(PETSTORE_DIR, 'sdk', change.path), 'utf8').catch(() => '(missing)');
       expect(committed, change.path).toBe(change.action === 'delete' ? '(deleted)' : change.content);
     }
+  });
+});
+
+describe('examples/petstore/sdk as committed', () => {
+  it('type-checks, including the hand-written code in its custom regions', async () => {
+    const dir = await tempDir();
+    await cp(path.join(PETSTORE_DIR, 'sdk'), path.join(dir, 'sdk'), { recursive: true });
+    await typecheck(path.join(dir, 'sdk'));
   });
 });
 
@@ -219,5 +228,141 @@ describe('regeneration', () => {
     const dir = await project(undefined, 'naming:\n  lock: false\n');
     const result = await gen(dir);
     expect(result.plan.changes.map((change) => change.path)).not.toContain(NAME_LOCK_FILE);
+  });
+});
+
+describe('custom regions', () => {
+  const STORE = 'generated/api/store.ts';
+
+  /** Adds an import and a helper method to the StoreApi class, inside its custom regions. */
+  async function customizeStore(dir: string): Promise<string> {
+    const file = path.join(dir, 'sdk', STORE);
+    const text = (await readFile(file, 'utf8'))
+      .replace('// <sdkgen:custom imports>\n', "// <sdkgen:custom imports>\nimport type { Pet } from '../models.js';\n")
+      .replace(
+        '  // <sdkgen:custom members>\n',
+        "  // <sdkgen:custom members>\n  /** The pet an order is for. */\n  orderedPet(order: Order): Pick<Pet, 'id'> {\n    return { id: order.petId };\n  }\n",
+      );
+    await writeFile(file, text);
+    return text;
+  }
+
+  it('keeps code inside custom regions when regenerating, and the result type-checks', async () => {
+    const dir = await project();
+    await gen(dir);
+    await customizeStore(dir);
+    await editSpec(dir, 'summary: Find purchase order by ID', 'summary: Find an order');
+    const result = await gen(dir);
+    expect(result.plan.conflicts).toEqual([]);
+    const store = await read(dir, STORE);
+    expect(store).toContain('Find an order');
+    expect(store).toContain("import type { Pet } from '../models.js';\n// </sdkgen:custom>");
+    expect(store).toContain('orderedPet(order: Order)');
+    expect((await gen(dir, { dryRun: true })).plan.changes.find((change) => change.path === STORE)?.action).toBe('unchanged');
+    await typecheck(path.join(dir, 'sdk'));
+  });
+
+  it('still reports edits outside custom regions', async () => {
+    const dir = await project();
+    await gen(dir);
+    await customizeStore(dir);
+    const file = path.join(dir, 'sdk', STORE);
+    await writeFile(file, (await readFile(file, 'utf8')).replace('export class StoreApi', '// tweak\nexport class StoreApi'));
+    await expect(gen(dir)).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT', details: [`${STORE} (edited since the last generation)`] });
+  });
+
+  it('keeps a file whose region code has nowhere to go, and says why', async () => {
+    const dir = await project();
+    await gen(dir);
+    await customizeStore(dir);
+    await editSpec(dir, /tags: \[store\]/g, 'tags: [pets]');
+    await expect(gen(dir)).rejects.toMatchObject({
+      code: 'OUTPUT_CONFLICT',
+      details: [`${STORE} (code in custom region imports, members would be lost: the region is no longer generated)`],
+    });
+    // Even --force leaves it in place rather than deleting the user's code.
+    await gen(dir, { force: true });
+    expect(await read(dir, STORE)).toContain('orderedPet(order: Order)');
+  });
+
+  it('reports broken region markers', async () => {
+    const dir = await project();
+    await gen(dir);
+    const file = path.join(dir, 'sdk', STORE);
+    await writeFile(file, (await customizeStore(dir)).replace('  // </sdkgen:custom>\n}', '}'));
+    await editSpec(dir, 'summary: Find purchase order by ID', 'summary: Find an order');
+    await expect(gen(dir)).rejects.toMatchObject({ code: 'OUTPUT_CONFLICT', details: [expect.stringMatching(/broken custom region markers: region "members" \(line \d+\) is never closed/)] });
+  });
+
+  it('can be turned off, without silently dropping code already in regions', async () => {
+    const dir = await project(undefined, 'typescript:\n  customRegions: false\n');
+    await gen(dir);
+    expect(await read(dir, STORE)).not.toContain('sdkgen:custom');
+    expect(await read(dir, STORE)).toContain('// Generated by sdkgen. Do not edit');
+
+    const withRegions = await project();
+    await gen(withRegions);
+    await customizeStore(withRegions);
+    await writeFile(path.join(withRegions, '.sdkgenrc.yml'), 'input: ./openapi.yaml\noutput: ./sdk\ntypescript:\n  customRegions: false\n');
+    await expect(gen(withRegions)).rejects.toMatchObject({ details: [expect.stringContaining('code in custom region imports, members would be lost')] });
+  });
+});
+
+describe('ignore', () => {
+  it('leaves ignored operations, their files and unused schemas out of the SDK and its changelog', async () => {
+    const dir = await project(undefined, 'ignore:\n  tags: [users]\n  operations: ["GET /health"]\n  unusedSchemas: true\n');
+    const first = await gen(dir);
+    expect(first.model.operations.map((op) => op.key)).not.toContain('POST /users/login');
+    expect(first.plan.changes.map((change) => change.path)).not.toContain('generated/api/users.ts');
+    expect(first.diagnostics).toContainEqual(expect.objectContaining({ code: 'IGNORED', message: 'Left out 2 operations (ignore config)' }));
+    expect(await read(dir, 'generated/client.ts')).not.toContain('healthCheck');
+
+    // Changes to ignored operations do not show up as API changes.
+    await editSpec(dir, 'summary: Log a user into the system\n      security: []', 'summary: Log a user into the system');
+    expect((await gen(dir)).changes?.changes).toEqual([]);
+    await typecheck(path.join(dir, 'sdk'));
+  });
+});
+
+describe('templates', () => {
+  it('puts the configured header at the top of generated files and scaffolds', async () => {
+    const dir = await project(undefined, 'templates:\n  header: |\n    // Copyright (c) Acme. {title} API {version}.\n');
+    await gen(dir);
+    for (const file of ['generated/models.ts', 'generated/runtime.ts', 'generated/api/pets.ts', 'generated/index.ts', 'client.ts', 'index.ts']) {
+      expect((await read(dir, file)).split('\n')[0], file).toBe('// Copyright (c) Acme. Swagger Petstore API 1.0.0.');
+    }
+    expect((await read(dir, 'generated/models.ts')).split('\n')[1]).toMatch(/^\/\/ Generated by sdkgen\./);
+    expect((await read(dir, 'client.ts')).split('\n')[1]).toBe('');
+    await typecheck(path.join(dir, 'sdk'));
+  });
+
+  async function withRuntime(edit: (source: string) => string): Promise<string> {
+    const dir = await project(undefined, 'templates:\n  runtime: ./sdkgen/runtime.ts\n');
+    await mkdir(path.join(dir, 'sdkgen'));
+    await writeFile(path.join(dir, 'sdkgen/runtime.ts'), edit(await ejectTemplate('runtime')));
+    return dir;
+  }
+
+  it('uses an ejected runtime instead of the built-in one', async () => {
+    const dir = await withRuntime((source) => `${source}\nexport const RETRIES = 3;\n`);
+    const result = await gen(dir);
+    expect(await read(dir, 'generated/runtime.ts')).toContain('export const RETRIES = 3;');
+    expect(result.diagnostics.map((item) => item.code)).not.toContain('TEMPLATE_OUTDATED');
+    await typecheck(path.join(dir, 'sdk'));
+  });
+
+  it('rejects a runtime that lacks what the generated code imports', async () => {
+    const dir = await withRuntime((source) => source.replace('export interface RequestOptions', 'interface RequestOptions'));
+    await expect(gen(dir)).rejects.toMatchObject({ code: 'TEMPLATE_INVALID', details: ['export RequestOptions'] });
+  });
+
+  it('warns when the runtime was ejected from another version of the built-in one', async () => {
+    const dir = await withRuntime((source) => source.replace(/fingerprint [0-9a-f]{12}/, 'fingerprint 000000000000'));
+    expect((await gen(dir)).diagnostics).toContainEqual(expect.objectContaining({ code: 'TEMPLATE_OUTDATED' }));
+  });
+
+  it('explains a missing runtime template', async () => {
+    const dir = await project(undefined, 'templates:\n  runtime: ./nope.ts\n');
+    await expect(gen(dir)).rejects.toMatchObject({ code: 'TEMPLATE_NOT_FOUND', hint: expect.stringContaining('sdkgen eject runtime') });
   });
 });

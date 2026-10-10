@@ -1,4 +1,5 @@
 import {
+  applyIgnore,
   buildModel,
   diffModels,
   diffTitle,
@@ -56,7 +57,10 @@ export async function compareSpecs(
       ? await loadSpec(newSpec, { cwd: ui.io.cwd, validate })
       : await config().then((resolved) => loadSpec(resolved.inputPath, { validate: resolved.validate }));
 
-  return { diff: diffModels(buildModel(from.document), buildModel(to.document)), from: from.source, to: to.source };
+  // When the comparison involves the SDK's config, compare what the SDK covers: apply its ignore list.
+  const ignore = pending && (await pending).ignore;
+  const model = (spec: LoadedSpec) => (ignore ? applyIgnore(buildModel(spec.document), ignore) : buildModel(spec.document));
+  return { diff: diffModels(model(from), model(to)), from: from.source, to: to.source };
 }
 
 async function lastGenerated(ui: Ui, config: ResolvedConfig): Promise<LoadedSpec> {

@@ -109,6 +109,29 @@ export const namingSchema = z.strictObject({
     .prefault({}),
 });
 
+const pattern = z.string().min(1);
+
+/** Comment lines only, so a header can never break the generated code. */
+const header = z.string().refine(
+  (text) => text.split('\n').every((line) => /^\s*($|\/\/|\/\*|\*)/.test(line)),
+  { message: 'Every line must be a comment (//, /* ... */) or blank' },
+);
+
+export const ignoreSchema = z.strictObject({
+  /** `METHOD /path` (`*` for any method, path wildcards as in `paths`) or operationId (`*` wildcards). */
+  operations: z.array(pattern).default([]),
+  /** Path patterns: `*` matches within one segment, `**` across segments, e.g. `/internal/**`. */
+  paths: z.array(pattern).default([]),
+  /** Operations carrying any of these tags. */
+  tags: z.array(pattern).default([]),
+  /** `components.schemas` names (`*` wildcards). References from kept operations become `unknown`. */
+  schemas: z.array(pattern).default([]),
+  /** Also leave out component schemas that no kept operation uses. */
+  unusedSchemas: z.boolean().default(false),
+});
+
+export type IgnoreConfig = z.output<typeof ignoreSchema>;
+
 export const configSchema = z.strictObject({
   $schema: z.string().optional(),
   /** Path or URL of the OpenAPI document, relative to the config file. */
@@ -132,6 +155,18 @@ export const configSchema = z.strictObject({
     .strictObject({
       /** Extension used in relative imports of generated files. `.js` suits Node ESM and bundlers alike. */
       importExtension: z.enum(['.js', '.ts', 'none']).default('.js'),
+      /** Emit `// <sdkgen:custom ...>` regions in generated files; code inside them survives regeneration. */
+      customRegions: z.boolean().default(true),
+    })
+    .prefault({}),
+  /** Leave parts of the API out of the SDK. */
+  ignore: ignoreSchema.prefault({}),
+  templates: z
+    .strictObject({
+      /** Your copy of the HTTP runtime (see `sdkgen eject runtime`), used instead of the built-in one. */
+      runtime: z.string().min(1).optional(),
+      /** Comment lines at the top of every generated file, e.g. a license. Placeholders: `{title}`, `{version}`. */
+      header: header.optional(),
     })
     .prefault({}),
   naming: namingSchema.prefault({}),
