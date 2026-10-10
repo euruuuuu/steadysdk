@@ -1,0 +1,23 @@
+{
+  "files": {
+    "generated/api/pets.ts": "87d95921f5126be405d92562db7546d31778fae0dc79584d26f25eb501a22457",
+    "generated/api/store.ts": "14517973d4e127a344c28c3702845a8abc0bfb1e3be3e5ba9f716d38199f29d6",
+    "generated/api/users.ts": "aa5e51a90e64175ffa069ad07b7bc1137bde7e5766366dd7b785fa3f4afb689b",
+    "generated/client.ts": "20bf3f46a3dfbb40803dc8f520355b6e74e82c6f772216e834284803ca0c0856",
+    "generated/index.ts": "0642314acf6d062d4211a4a220b9f97ccb2fd4beca86e59c7914910407eec8ce",
+    "generated/models.ts": "3ec6b66bc93f56675b1fad2b3c8df936985d6d78d3e772ec4f383c59a31a3f85",
+    "generated/runtime.ts": "ea6a46612a60003d2b29e534a524ceb7cfc3e067ed775d39e732c178beed6011"
+  },
+  "generator": {
+    "name": "sdkgen",
+    "target": "typescript",
+    "version": "0.1.0"
+  },
+  "spec": {
+    "hash": "c0769bc1184f7c17d1b52797c330a7db178afb6a2c951412a7b4c01b35cf1ae3",
+    "openapi": "3.0.3",
+    "title": "Swagger Petstore",
+    "version": "1.0.0"
+  },
+  "version": 1
+}

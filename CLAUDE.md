@@ -1,0 +1,76 @@
+# sdkgen — OpenAPI SDK generator & maintainer
+
+TypeScript CLI that generates typed API clients from OpenAPI 3.0/3.1 and keeps them maintainable across
+regenerations: user code is never overwritten, names stay stable (name lock), and (next) API changes are
+reported as a changelog with breaking-change detection. Portfolio project; README.md is the public face.
+
+## Workflow
+
+- Built milestone by milestone. After each milestone: stop, summarize, wait for the go-ahead. Update this
+  file (status, architecture, rules) at the end of every milestone.
+- Use the latest *stable* library versions and check current docs, not memory (TS 7, Vitest 5, Commander 15
+  and Zod 4 all have breaking changes vs. older majors).
+- Before finishing: `npm run typecheck && npm test`, and `npm run examples` if generator output changed
+  (the committed `examples/petstore/sdk` is the golden snapshot; a test fails when it is stale).
+
+## Status
+
+| Milestone | Scope | Status |
+| --- | --- | --- |
+| A | Workspace, spec loading + validation, IR, naming engine + name lock, TS generator, output planner (manifest, conflicts, stale deletion), CLI `init`/`generate` (`--dry-run --check --relock --force`), petstore example, CI | ✅ Done 2026-10-10 |
+| B | Drift/changelog: diff two specs (or `.sdkgen/spec.json` vs current) at IR level; added/removed/changed ops, params, bodies, responses, schemas, enums, required flags; breaking vs non-breaking; Markdown + JSON; `sdkgen diff` / `sdkgen changelog`; show changelog during `generate` | Next |
+| C | Maintenance extras: marker regions (`// <sdkgen:...>`) for partial updates, ignore lists (ops/paths/schemas), template overrides | Planned |
+| D | `sdkgen watch`, CI gating (fail on breaking changes without a version bump), GitHub Action example | Planned |
+| E | VS Code extension reusing core (commands, out-of-sync status bar, CodeLens), npm publish prep, README polish/GIF | Planned |
+
+## Commands
+
+```bash
+npm run build        # tsc -b  → packages/*/dist
+npm test             # vitest (runs against src via alias; no build needed)
+npm run typecheck    # tsc -b + tsconfig.tests.json (tests + runtime template)
+npm run examples     # build, then regenerate examples/petstore/sdk
+node packages/cli/dist/index.js generate -C examples/petstore --verbose
+```
+
+## Architecture
+
+npm workspaces, ESM only, Node ≥ 22.19 (swagger-parser 13 requires it).
+
+```
+packages/core/src
+  spec/load.ts         swagger-parser bundle (external $refs in, internal kept) + validate; spec/semantic.ts adds
+                       path-param and operationId checks (swagger-parser skips them for OAS3)
+  ir/model.ts          IR types: ApiModel, Operation, Parameter, SchemaNode (ref|scalar|array|object|union|intersection|unknown)
+  ir/build.ts          OpenAPI → IR. Handles 3.0/3.1 (nullable, type arrays, const), $ref chains, param merging,
+                       security inheritance. Component schema refs stay `{kind:'ref', target: key}`; others are inlined.
+  config/schema.ts     zod schema for .sdkgenrc.yml (strict objects; use .prefault({}) for nested defaults in Zod 4)
+  config/load.ts       upward config search; config paths relative to config file, CLI flag paths relative to cwd
+  naming/case.ts       splitWords / applyCase / acronyms
+  naming/engine.ts     NamingEngine: stateless desired names (operationId or path templates, overrides, groups, params)
+  naming/assign.ts     assignNames: uniqueness per scope + lock. Locked names claimed first; config hash change → re-derive
+  naming/lock.ts       .sdkgen/names.lock.json (identity → name; identities like `operation:GET /pets#params`)
+  generators/typescript/  index.ts (files), operations.ts (methods, media selection), types.ts (SchemaNode → TS), code.ts (writer)
+  output/manifest.ts   .sdkgen/manifest.json: sha256 of every generated file
+  output/plan.ts       planOutput (create/update/delete/unchanged/keep + conflicts) and applyPlan
+  generate.ts          orchestrator: load → model → lock → generate → plan → (refuse on conflicts unless force) → write
+packages/core/templates/typescript/runtime.ts   copied verbatim into generated/runtime.ts (type-checked by tsconfig.tests.json)
+packages/cli/src       commander program (cli.ts `run(argv, io)` is in-process testable), commands/, ui.ts
+```
+
+Output layout: `<out>/generated/**` (sdkgen-owned, manifest-tracked), `<out>/index.ts` + `<out>/client.ts`
+(scaffolded once, user-owned), `<out>/.sdkgen/{manifest,names.lock,spec}.json` (commit them).
+
+## Rules
+
+- Generated output must be deterministic: no timestamps, stable ordering. Version strings only where meaningful.
+- Generated TS must compile under the strictest flags (see `typecheck()` in packages/core/test/generate.test.ts):
+  `import type` for types, no parameter properties/enums (erasableSyntaxOnly), explicit types (isolatedDeclarations),
+  never emit an unused import.
+- Never delete or overwrite a file sdkgen did not write: only manifest-listed files whose hash matches are touched;
+  anything else is a conflict (`OUTPUT_CONFLICT`) unless `--force`.
+- User-facing failures are `SdkgenError` (code + message + details + hint). Anything else is a bug and the CLI says so.
+- New exported names in runtime.ts are reserved automatically (scanned); names generated in client.ts must be
+  added to `RESERVED_TYPE_NAMES`.
+- Tool quirk: typing ` `-style escapes through the Write tool turns them into raw characters; write them via
+  a script (e.g. python with `chr(92)`) and grep for U+2028/2029 afterwards.

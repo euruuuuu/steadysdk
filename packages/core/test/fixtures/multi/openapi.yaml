@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info: { title: Multi-file, version: '1' }
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Pet' }
+components:
+  schemas:
+    Pet:
+      $ref: './schemas/pet.yaml'

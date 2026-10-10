@@ -1,0 +1,13 @@
+# sdkgen config for the Petstore example. Run from the repo root: npm run examples
+input: ./openapi.yaml
+output: ./sdk
+
+client:
+  name: PetstoreClient
+  groupBy: tag
+
+naming:
+  acronyms: [ID, URL]
+  overrides:
+    operations:
+      showPetById: getPet

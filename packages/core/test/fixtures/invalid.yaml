@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Invalid
+  version: '1'
+paths:
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      responses:
+        '200':
+          description: ok

@@ -1,0 +1,107 @@
+# Every sdkgen option, with its default. Copy what you need into .sdkgenrc.yml.
+# Paths are relative to the config file. Unknown keys are rejected, so typos surface immediately.
+
+# OpenAPI 3.0 / 3.1 document: YAML or JSON, local path or http(s) URL. Required.
+input: ./openapi.yaml
+
+# Output directory. sdkgen owns <output>/generated/ and <output>/.sdkgen/;
+# index.ts and client.ts are created once and are yours from then on.
+output: ./sdk
+
+# Only TypeScript for now.
+target: typescript
+
+# Validate the spec (OpenAPI schema + path-parameter and operationId checks) before generating.
+validate: true
+
+client:
+  # Root client class. Default: spec title + "Client" ("Swagger Petstore" -> SwaggerPetstoreClient).
+  # name: PetstoreClient
+
+  # How operations are grouped:
+  #   tag  -> client.pets.listPets()   (first tag; untagged operations stay on the root client)
+  #   path -> client.pets.listPets()   (first path segment, ignoring naming.operations.ignoreSegments)
+  #   none -> client.listPets()
+  groupBy: tag
+
+  # Overrides servers[0].url as the default base URL. Callers can still pass `baseUrl` at runtime.
+  # baseUrl: https://api.example.com
+
+typescript:
+  # Extension in relative imports: .js (Node ESM + bundlers), .ts (Deno, Bun,
+  # allowImportingTsExtensions), or none (bundler resolution).
+  importExtension: .js
+
+naming:
+  # Words kept in a fixed form, matched case-insensitively. With [ID, API]:
+  # userId -> userID, apiKey -> APIKey (but camelCase still starts lower-case: apiKey stays apiKey).
+  acronyms: []
+
+  operations:
+    # camel | pascal | snake | constant | preserve
+    case: camel
+    # operationId: use the operationId when present, else derive from the path. path: always derive.
+    source: operationId
+    # Regular expressions removed from operationIds, e.g. NestJS's "UsersController_findOne".
+    stripPrefixes: []
+    # Words added around every method name ("async" suffix -> listPetsAsync).
+    prefix: ''
+    suffix: ''
+    # Templates for path-derived names. Placeholders:
+    #   {verb} list/get/create/update/patch/delete (HTTP method for others)  {method} HTTP method
+    #   {Resource} singular, parents included: /users/{id}/posts -> UserPost
+    #   {Resources} plural: UserPosts       {Target} singular for item paths, plural for collections
+    #   {By} ById, ByBucketAndKey ...       {action} verb segment: /orders/{id}/cancel -> Cancel
+    templates:
+      list: list{Resources}       # GET /users            -> listUsers
+      get: get{Resource}{By}      # GET /users/{id}       -> getUserById
+      create: create{Resource}    # POST /users           -> createUser
+      update: update{Target}      # PUT /users/{id}       -> updateUser
+      patch: patch{Target}        # PATCH /users/{id}     -> patchUser
+      delete: delete{Target}      # DELETE /users/{id}    -> deleteUser
+      action: '{action}{Target}'  # POST /orders/{id}/cancel -> cancelOrder
+      other: '{method}{Target}'   # HEAD /users           -> headUsers
+    # Static path segments that read as verbs (replaces the built-in list of ~40 words).
+    # actions: [cancel, search, publish]
+    # Path segments ignored when deriving names (regular expressions matched against the whole segment).
+    ignoreSegments: [api, 'v\d+']
+
+  types:
+    case: pascal
+    prefix: ''
+    suffix: ''             # e.g. Dto -> PetDto
+    # Appended when a type name clashes with a built-in or runtime name: Error -> ErrorModel.
+    reservedSuffix: Model
+
+  parameters:
+    # Property names in params objects: camel (X-Request-ID -> xRequestId), snake, or preserve.
+    case: camel
+
+  groups:
+    # Client property for each group: client.petStore
+    case: camel
+    # Class name for each group. Placeholder: {Group}.
+    className: '{Group}Api'
+
+  # Helper types derived from operations. Placeholder: {Operation} (PascalCase method name).
+  derived:
+    params: '{Operation}Params'          # ListPetsParams
+    requestBody: '{Operation}Request'    # only for inline request schemas
+    response: '{Operation}Response'      # only for inline response schemas
+
+  pluralization:
+    enabled: true
+    irregular: {}          # { person: people }
+    uncountable: []        # [metadata, feedback]
+
+  # Pin every assigned name in <output>/.sdkgen/names.lock.json so regeneration never renames existing
+  # methods or types (e.g. when an operationId changes upstream or a new endpoint collides).
+  # `sdkgen generate --relock` re-derives names; changing any naming option re-derives them too.
+  lock: true
+
+  # Explicit names always win.
+  overrides:
+    operations: {}         # "GET /users/{id}": fetchUser   or by operationId:   listPets: getAllPets
+    schemas: {}            # UserDTO: User
+    groups: {}             # pet-store: pets
+    parameters: {}         # X-Request-ID: requestId

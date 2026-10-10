@@ -1,0 +1,126 @@
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { parse as parseYaml } from 'yaml';
+import type { z } from 'zod';
+import { SdkgenError } from '../errors.js';
+import { configSchema, type SdkgenConfig, type SdkgenConfigInput } from './schema.js';
+
+/** Looked up in this order, from the working directory upwards. */
+export const CONFIG_FILE_NAMES = [
+  '.sdkgenrc.yml',
+  '.sdkgenrc.yaml',
+  '.sdkgenrc.json',
+  'sdkgen.config.yml',
+  'sdkgen.config.yaml',
+  'sdkgen.config.json',
+] as const;
+
+export interface ResolvedConfig extends SdkgenConfig {
+  /** Absolute path of the config file; undefined when the config came from flags alone. */
+  configPath: string | undefined;
+  /** Directory relative paths in the config are resolved against. */
+  rootDir: string;
+  /** Absolute path (or URL) of the OpenAPI document. */
+  inputPath: string;
+  /** Absolute output directory. */
+  outputDir: string;
+}
+
+export interface LoadConfigOptions {
+  cwd?: string;
+  /** Explicit config file; skips the upward search. */
+  configPath?: string;
+  /** Values that win over the config file (typically CLI flags). Paths are resolved against `cwd`. */
+  overrides?: Partial<Pick<SdkgenConfigInput, 'input' | 'output' | 'validate'>>;
+}
+
+export async function findConfigFile(startDir: string): Promise<string | undefined> {
+  let dir = path.resolve(startDir);
+  for (;;) {
+    for (const name of CONFIG_FILE_NAMES) {
+      const candidate = path.join(dir, name);
+      if ((await stat(candidate).catch(() => undefined))?.isFile()) return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+export async function loadConfig(options: LoadConfigOptions = {}): Promise<ResolvedConfig> {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const configPath = options.configPath ? path.resolve(cwd, options.configPath) : await findConfigFile(cwd);
+
+  let fileConfig: Record<string, unknown> = {};
+  if (configPath) {
+    fileConfig = await readConfigFile(configPath);
+  } else if (options.overrides?.input === undefined) {
+    throw new SdkgenError('CONFIG_NOT_FOUND', 'No sdkgen config file found', {
+      hint: 'Run `sdkgen init` to create .sdkgenrc.yml, or pass --input <spec>.',
+    });
+  }
+
+  const rootDir = configPath ? path.dirname(configPath) : cwd;
+  const overrides = options.overrides ?? {};
+  // Flag paths are relative to where the command runs, not to the config file.
+  const merged = {
+    ...fileConfig,
+    ...(overrides.input !== undefined && { input: absolutize(cwd, overrides.input) }),
+    ...(overrides.output !== undefined && { output: absolutize(cwd, overrides.output) }),
+    ...(overrides.validate !== undefined && { validate: overrides.validate }),
+  };
+
+  const config = parseConfig(merged, configPath ?? 'command-line options');
+  return {
+    ...config,
+    configPath,
+    rootDir,
+    inputPath: absolutize(rootDir, config.input),
+    outputDir: path.resolve(rootDir, config.output),
+  };
+}
+
+export function parseConfig(value: unknown, source = 'config'): SdkgenConfig {
+  const result = configSchema.safeParse(value);
+  if (!result.success) {
+    throw new SdkgenError('CONFIG_INVALID', `Invalid sdkgen config (${source})`, {
+      details: formatIssues(result.error.issues),
+      hint: 'See .sdkgenrc.example.yml for every supported option.',
+    });
+  }
+  return result.data;
+}
+
+async function readConfigFile(file: string): Promise<Record<string, unknown>> {
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (error) {
+    throw new SdkgenError('CONFIG_NOT_FOUND', `Cannot read config file ${file}`, { cause: error });
+  }
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(text);
+  } catch (error) {
+    throw new SdkgenError('CONFIG_INVALID', `Config file ${file} is not valid YAML/JSON`, {
+      details: [error instanceof Error ? error.message : String(error)],
+      cause: error,
+    });
+  }
+  if (parsed === null || parsed === undefined) return {};
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SdkgenError('CONFIG_INVALID', `Config file ${file} must contain a mapping of options`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function formatIssues(issues: readonly z.core.$ZodIssue[]): string[] {
+  return issues.map((issue) => {
+    const where = issue.path.length > 0 ? issue.path.map(String).join('.') : '(root)';
+    return `${where}: ${issue.message}`;
+  });
+}
+
+function absolutize(base: string, target: string): string {
+  return /^https?:\/\//i.test(target) ? target : path.resolve(base, target);
+}
