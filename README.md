@@ -45,6 +45,7 @@ npx steadysdk generate    # writes ./sdk
 The package is `@steadysdk/cli`; the command it installs is `steadysdk`. Using the generated client:
 
 ```ts
+// The client is named after your spec's title (here "Petstore"), or `client.name` in the config.
 import { PetstoreClient } from './sdk/index.js';
 
 const client = new PetstoreClient({ auth: { bearerAuth: process.env.TOKEN } });
