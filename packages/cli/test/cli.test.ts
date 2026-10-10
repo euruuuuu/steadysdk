@@ -5,6 +5,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { run } from '../src/cli.js';
 
 const PETSTORE_SPEC = path.resolve(import.meta.dirname, '../../../examples/petstore/openapi.yaml');
+const PETSTORE_NEXT = path.resolve(import.meta.dirname, '../../../examples/petstore/next');
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'sdkgen-cli-'));
@@ -69,14 +70,19 @@ describe('sdkgen CLI', () => {
     });
   });
 
-  describe('generate', () => {
-    async function project(): Promise<string> {
-      const dir = await tempDir();
-      await copyFile(PETSTORE_SPEC, path.join(dir, 'openapi.yaml'));
-      await sdkgen(dir, 'init');
-      return dir;
-    }
+  async function project(): Promise<string> {
+    const dir = await tempDir();
+    await copyFile(PETSTORE_SPEC, path.join(dir, 'openapi.yaml'));
+    await sdkgen(dir, 'init');
+    return dir;
+  }
 
+  async function editSpec(dir: string, from: string, to: string): Promise<void> {
+    const spec = path.join(dir, 'openapi.yaml');
+    await writeFile(spec, (await readFile(spec, 'utf8')).replace(from, to));
+  }
+
+  describe('generate', () => {
     it('generates the SDK and reports what changed', async () => {
       const dir = await project();
       const result = await sdkgen(dir, 'generate');
@@ -140,11 +146,87 @@ describe('sdkgen CLI', () => {
       expect(await readFile(models, 'utf8')).not.toBe('// edited\n');
     });
 
+    it('lists the API changes it picked up since the last run', async () => {
+      const dir = await project();
+      expect((await sdkgen(dir, 'generate')).stdout).not.toContain('API changes');
+      await editSpec(dir, 'version: 1.0.0', 'version: 1.1.0');
+      await editSpec(dir, 'operationId: healthCheck', 'operationId: health');
+      const result = await sdkgen(dir, 'generate');
+      expect(result.stdout).toContain('API changes since the last generation (1.0.0 → 1.1.0): 1 non-breaking');
+      expect(result.stdout).toContain('~ GET /health: operationId changed from `healthCheck` to `health`.');
+    });
+
     it('runs relative to --cwd', async () => {
       const dir = await project();
       const parent = path.dirname(dir);
       const result = await sdkgen(parent, '--cwd', path.basename(dir), 'generate');
       expect(result.code).toBe(0);
+    });
+  });
+
+  describe('diff', () => {
+    async function generated(): Promise<string> {
+      const dir = await project();
+      await sdkgen(dir, 'generate');
+      return dir;
+    }
+
+    it('needs a previous generation to compare against', async () => {
+      const result = await sdkgen(await project(), 'diff');
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('No generated SDK found in sdk to compare against');
+      expect(result.stderr).toContain('`sdkgen diff old.yaml new.yaml`');
+    });
+
+    it('lists changes since the last generation, and --fail-on-breaking gates on them', async () => {
+      const dir = await generated();
+      expect((await sdkgen(dir, 'diff')).stdout).toContain('No API changes (Swagger Petstore 1.0.0)');
+
+      await editSpec(dir, 'enum: [available, pending, sold]', 'enum: [available, pending]');
+      await editSpec(dir, 'operationId: healthCheck', 'operationId: health');
+      const result = await sdkgen(dir, 'diff', '--fail-on-breaking');
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain('Comparing sdk/.sdkgen/spec.json → openapi.yaml');
+      expect(result.stdout).toContain('API changes in Swagger Petstore 1.0.0: 1 breaking, 1 non-breaking');
+      expect(result.stdout).toContain('! schema PetStatus: Enum value `sold` was removed.');
+      expect(result.stdout).toContain('~ GET /health: operationId changed from `healthCheck` to `health`.');
+      expect(result.stderr).toContain('1 breaking change (--fail-on-breaking)');
+      expect((await sdkgen(dir, 'diff')).code).toBe(0);
+    });
+
+    it('previews another spec against the SDK with --input, as JSON', async () => {
+      const dir = await generated();
+      const result = await sdkgen(dir, 'diff', '-i', path.join(PETSTORE_NEXT, 'openapi.yaml'), '--json');
+      expect(result.code).toBe(0);
+      const diff = JSON.parse(result.stdout) as { from: { version: string }; to: { version: string }; summary: object; changes: unknown[] };
+      expect(diff).toMatchObject({ from: { version: '1.0.0' }, to: { version: '1.1.0' }, summary: { breaking: 5, nonBreaking: 7 } });
+      expect(diff.changes[0]).toMatchObject({ kind: 'parameter-required', operation: 'GET /pets', breaking: true });
+    });
+
+    it('compares two files without a config', async () => {
+      const dir = await tempDir();
+      const result = await sdkgen(dir, 'diff', PETSTORE_SPEC, path.join(PETSTORE_NEXT, 'openapi.yaml'));
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('API changes in Swagger Petstore 1.0.0 → 1.1.0: 5 breaking, 7 non-breaking');
+    });
+  });
+
+  describe('changelog', () => {
+    it('prints a Markdown changelog', async () => {
+      const result = await sdkgen(await tempDir(), 'changelog', PETSTORE_SPEC, path.join(PETSTORE_NEXT, 'openapi.yaml'));
+      expect(result).toMatchObject({ code: 0, stderr: '' });
+      expect(result.stdout).toBe(await readFile(path.join(PETSTORE_NEXT, 'CHANGELOG.md'), 'utf8'));
+    });
+
+    it('writes JSON or Markdown to a file with --out', async () => {
+      const dir = await tempDir();
+      const next = path.join(PETSTORE_NEXT, 'openapi.yaml');
+      const result = await sdkgen(dir, 'changelog', PETSTORE_SPEC, next, '--out', 'notes/api.md');
+      expect(result.stdout).toContain('Wrote notes/api.md (5 breaking, 7 non-breaking)');
+      expect(await readFile(path.join(dir, 'notes/api.md'), 'utf8')).toContain('## Swagger Petstore 1.0.0 → 1.1.0');
+
+      await sdkgen(dir, 'changelog', PETSTORE_SPEC, next, '--json', '--out', 'api.json');
+      expect(JSON.parse(await readFile(path.join(dir, 'api.json'), 'utf8'))).toMatchObject({ version: 1, summary: { breaking: 5 } });
     });
   });
 });

@@ -7,6 +7,7 @@ export type SdkgenErrorCode =
   | 'SPEC_PARSE_FAILED'
   | 'SPEC_INVALID'
   | 'SPEC_UNSUPPORTED'
+  | 'BASELINE_NOT_FOUND'
   | 'NAMING_INVALID'
   | 'OUTPUT_UNSAFE'
   | 'OUTPUT_CONFLICT';

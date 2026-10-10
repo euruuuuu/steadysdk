@@ -1,4 +1,5 @@
 import { generate, hasChanges, loadConfig, MANIFEST_FILE, type FileAction, type OutputPlan } from '@sdkgen/core';
+import { printChanges } from '../changes.js';
 import type { Ui } from '../ui.js';
 
 export interface GenerateCommandOptions {
@@ -37,6 +38,14 @@ export async function generateCommand(ui: Ui, options: GenerateCommandOptions): 
       `${count(model.operations.length, 'operation')}, ${count(model.schemas.length, 'schema')}`,
   );
   ui.diagnostics(result.diagnostics, options.verbose === true);
+  if (result.changes && result.changes.changes.length > 0) {
+    const { from, to } = result.changes;
+    printChanges(ui, result.changes, {
+      heading: `API changes since the last generation${from.version === to.version ? '' : ` (${from.version} → ${to.version})`}`,
+      limit: options.verbose ? undefined : 10,
+      moreHint: 'run with --verbose to list them all',
+    });
+  }
 
   if (options.check) return reportCheck(ui, plan);
 

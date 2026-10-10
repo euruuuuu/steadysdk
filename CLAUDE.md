@@ -1,8 +1,8 @@
 # sdkgen — OpenAPI SDK generator & maintainer
 
 TypeScript CLI that generates typed API clients from OpenAPI 3.0/3.1 and keeps them maintainable across
-regenerations: user code is never overwritten, names stay stable (name lock), and (next) API changes are
-reported as a changelog with breaking-change detection. Portfolio project; README.md is the public face.
+regenerations: user code is never overwritten, names stay stable (name lock), and API changes are reported
+as a changelog with breaking-change detection. Portfolio project; README.md is the public face.
 
 ## Workflow
 
@@ -10,16 +10,17 @@ reported as a changelog with breaking-change detection. Portfolio project; READM
   file (status, architecture, rules) at the end of every milestone.
 - Use the latest *stable* library versions and check current docs, not memory (TS 7, Vitest 5, Commander 15
   and Zod 4 all have breaking changes vs. older majors).
-- Before finishing: `npm run typecheck && npm test`, and `npm run examples` if generator output changed
-  (the committed `examples/petstore/sdk` is the golden snapshot; a test fails when it is stale).
+- Before finishing: `npm run typecheck && npm test`, and `npm run examples` if generator or diff output changed
+  (the committed `examples/petstore/sdk` and `examples/petstore/next/CHANGELOG.md` are golden snapshots; tests
+  fail when they are stale).
 
 ## Status
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | A | Workspace, spec loading + validation, IR, naming engine + name lock, TS generator, output planner (manifest, conflicts, stale deletion), CLI `init`/`generate` (`--dry-run --check --relock --force`), petstore example, CI | ✅ Done 2026-10-10 |
-| B | Drift/changelog: diff two specs (or `.sdkgen/spec.json` vs current) at IR level; added/removed/changed ops, params, bodies, responses, schemas, enums, required flags; breaking vs non-breaking; Markdown + JSON; `sdkgen diff` / `sdkgen changelog`; show changelog during `generate` | Next |
-| C | Maintenance extras: marker regions (`// <sdkgen:...>`) for partial updates, ignore lists (ops/paths/schemas), template overrides | Planned |
+| B | Drift/changelog: IR-level diff (ops, params, bodies, responses, schemas, enums, required flags, security, servers), direction-aware breaking classification, Markdown + versioned JSON, `sdkgen diff` (`--json --fail-on-breaking -i`) / `sdkgen changelog` (`--out`), changes listed by `generate` (and `--check`), petstore `next/` changelog example | ✅ Done 2026-10-10 |
+| C | Maintenance extras: marker regions (`// <sdkgen:...>`) for partial updates, ignore lists (ops/paths/schemas), template overrides | Next |
 | D | `sdkgen watch`, CI gating (fail on breaking changes without a version bump), GitHub Action example | Planned |
 | E | VS Code extension reusing core (commands, out-of-sync status bar, CodeLens), npm publish prep, README polish/GIF | Planned |
 
@@ -29,8 +30,9 @@ reported as a changelog with breaking-change detection. Portfolio project; READM
 npm run build        # tsc -b  → packages/*/dist
 npm test             # vitest (runs against src via alias; no build needed)
 npm run typecheck    # tsc -b + tsconfig.tests.json (tests + runtime template)
-npm run examples     # build, then regenerate examples/petstore/sdk
+npm run examples     # build, then regenerate examples/petstore/sdk and examples/petstore/next/CHANGELOG.md
 node packages/cli/dist/index.js generate -C examples/petstore --verbose
+node packages/cli/dist/index.js diff -C examples/petstore -i next/openapi.yaml
 ```
 
 ## Architecture
@@ -53,9 +55,18 @@ packages/core/src
   generators/typescript/  index.ts (files), operations.ts (methods, media selection), types.ts (SchemaNode → TS), code.ts (writer)
   output/manifest.ts   .sdkgen/manifest.json: sha256 of every generated file
   output/plan.ts       planOutput (create/update/delete/unchanged/keep + conflicts) and applyPlan
-  generate.ts          orchestrator: load → model → lock → generate → plan → (refuse on conflicts unless force) → write
+  diff/schema.ts       SchemaComparer: structural, direction-aware (request/response/both) schema diff; same-target refs
+                       stop (component changes are reported on the component), differing refs are expanded and
+                       compared (shape-preserving renames/extractions → `reference-changed`); allOf flattening; schemaUsage
+  diff/diff.ts         diffModels(from, to): ops matched by key, then by path shape (path-param renames); params, bodies,
+                       responses, media types, security (collapsed to one `api` change when every op changed alike),
+                       component schemas (direction from usage in both versions), security schemes, default server
+  diff/render.ts       renderChangelog (Markdown), serializeDiff (JSON), diffTitle, changeSubject
+  diff/baseline.ts     loadSpecSnapshot(outputDir): `.sdkgen/spec.json`, loaded without validation
+  generate.ts          orchestrator: load → model → baseline diff → lock → generate → plan → (refuse on conflicts unless force) → write
 packages/core/templates/typescript/runtime.ts   copied verbatim into generated/runtime.ts (type-checked by tsconfig.tests.json)
-packages/cli/src       commander program (cli.ts `run(argv, io)` is in-process testable), commands/, ui.ts
+packages/cli/src       commander program (cli.ts `run(argv, io)` is in-process testable), commands/ (init, generate,
+                       diff + changelog share `compareSpecs`), changes.ts (terminal change list), ui.ts
 ```
 
 Output layout: `<out>/generated/**` (sdkgen-owned, manifest-tracked), `<out>/index.ts` + `<out>/client.ts`
@@ -72,5 +83,11 @@ Output layout: `<out>/generated/**` (sdkgen-owned, manifest-tracked), `<out>/ind
 - User-facing failures are `SdkgenError` (code + message + details + hint). Anything else is a bug and the CLI says so.
 - New exported names in runtime.ts are reserved automatically (scanned); names generated in client.ts must be
   added to `RESERVED_TYPE_NAMES`.
+- Breaking = a client built for the old spec, or code written against the old SDK, can fail with the new one.
+  Request side may only loosen, response side may only tighten, removals break both. Schema rules declare the
+  direction they break in (`Breaks`), never a hard-coded boolean, so components get the right verdict from usage.
+- The diff JSON (`ApiDiff`, `DIFF_FORMAT_VERSION`) is a public format: add fields, never rename/remove; new keys
+  must also go into `CHANGE_KEYS` (fixed key order). Messages are one sentence, subject-free, Markdown inline code.
+- Documentation-only edits (summary, description, examples) never produce changes.
 - Tool quirk: typing ` `-style escapes through the Write tool turns them into raw characters; write them via
   a script (e.g. python with `chr(92)`) and grep for U+2028/2029 afterwards.

@@ -20,6 +20,10 @@ export { NamingEngine, normalizeOperationKey, type PathAnalysis, type DerivedTyp
 export { assignNames, namingConfigHash, type SdkNames, type OperationNames, type GroupNames, type AssignNamesOptions } from './naming/assign.js';
 export { readNameLock, serializeNameLock, NAME_LOCK_VERSION, type NameLock, type ReadNameLockResult } from './naming/lock.js';
 export { generate, type GenerateOptions, type GenerateResult } from './generate.js';
+export { diffModels } from './diff/diff.js';
+export { renderChangelog, serializeDiff, diffTitle, changeSubject } from './diff/render.js';
+export { loadSpecSnapshot } from './diff/baseline.js';
+export { DIFF_FORMAT_VERSION, type ApiDiff, type Change, type ChangeKind, type ChangeScope } from './diff/types.js';
 export { generateTypeScript, type GeneratorOutput, type TypeScriptGeneratorInput } from './generators/typescript/index.js';
 export type { GeneratedFile, FileOwnership } from './generators/types.js';
 export {

@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { SDKGEN_VERSION } from '@sdkgen/core';
+import { changelogCommand, type ChangelogCommandOptions } from './commands/changelog.js';
+import { diffCommand, type DiffCommandOptions } from './commands/diff.js';
 import { generateCommand, type GenerateCommandOptions } from './commands/generate.js';
 import { initCommand, type InitCommandOptions } from './commands/init.js';
 import { defaultIo, Ui, type Io } from './ui.js';
@@ -27,12 +29,14 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     const cwd = globals.cwd === undefined ? io.cwd : path.resolve(io.cwd, globals.cwd);
     return new Ui({ ...io, cwd, color: io.color && globals.color !== false });
   };
+  // Commander calls actions with the positional arguments, then the options, then the command.
   const action =
-    <T>(handler: (ui: Ui, options: T) => Promise<number>) =>
-    async (options: T, command: Command): Promise<void> => {
+    <T>(handler: (ui: Ui, options: T, args: Array<string | undefined>) => Promise<number>) =>
+    async (...received: unknown[]): Promise<void> => {
+      const command = received.at(-1) as Command;
       const ui = uiFor(command);
       try {
-        exitCode = await handler(ui, options);
+        exitCode = await handler(ui, received.at(-2) as T, command.processedArgs as Array<string | undefined>);
       } catch (error) {
         ui.error(error);
         exitCode = 1;
@@ -61,6 +65,25 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .option('-f, --force', 'overwrite generated files even if they were edited by hand')
     .option('--verbose', 'show notes and unchanged files')
     .action(action<GenerateCommandOptions>(generateCommand));
+
+  const specArguments = (command: Command): Command =>
+    command
+      .argument('[old]', 'spec to compare from (default: the spec the SDK was last generated from)')
+      .argument('[new]', 'spec to compare to (default: the configured input)')
+      .option('-c, --config <file>', 'config file (default: nearest .sdkgenrc.yml)')
+      .option('-i, --input <spec>', 'use this spec instead of the configured input as [new]')
+      .option('--no-validate', 'skip OpenAPI validation')
+      .option('--json', 'print the changes as JSON');
+
+  specArguments(program.command('diff'))
+    .description('list API changes, marking breaking ones (default: since the last generation)')
+    .option('--fail-on-breaking', 'exit 1 if any change is breaking (for CI)')
+    .action(action<DiffCommandOptions>(diffCommand));
+
+  specArguments(program.command('changelog'))
+    .description('write the API changes as a Markdown changelog entry')
+    .option('--out <file>', 'write to a file instead of stdout')
+    .action(action<ChangelogCommandOptions>(changelogCommand));
 
   try {
     await program.parseAsync([...argv], { from: 'user' });

@@ -192,6 +192,29 @@ describe('regeneration', () => {
     expect(await read(dir, 'generated/api/pets.ts')).toContain('findPets(');
   });
 
+  it('reports API changes since the last generation', async () => {
+    const dir = await project();
+    expect((await gen(dir)).changes).toBeUndefined();
+    expect((await gen(dir)).changes?.changes).toEqual([]);
+
+    await editSpec(dir, 'enum: [available, pending, sold]', 'enum: [available, pending]');
+    const dry = await gen(dir, { dryRun: true });
+    expect(dry.changes?.changes).toEqual([expect.objectContaining({ kind: 'enum-value-removed', schema: 'PetStatus', breaking: true })]);
+    // A dry run leaves the baseline alone, so the next real run still sees the change.
+    expect((await gen(dir)).changes?.summary).toEqual({ breaking: 1, nonBreaking: 0 });
+    expect((await gen(dir)).changes?.changes).toEqual([]);
+  });
+
+  it('carries on without a changelog when the spec snapshot is unreadable', async () => {
+    const dir = await project();
+    await gen(dir);
+    await writeFile(path.join(dir, 'sdk/.sdkgen/spec.json'), '{ "not": "a spec" }\n');
+    const result = await gen(dir);
+    expect(result.changes).toBeUndefined();
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'SPEC_SNAPSHOT_INVALID', level: 'warning' }));
+    expect((await gen(dir)).changes?.changes).toEqual([]);
+  });
+
   it('does not write a lock when locking is disabled', async () => {
     const dir = await project(undefined, 'naming:\n  lock: false\n');
     const result = await gen(dir);

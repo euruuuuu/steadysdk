@@ -2,6 +2,9 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import type { ResolvedConfig } from './config/load.js';
 import { Diagnostics, type Diagnostic } from './diagnostics.js';
+import { loadSpecSnapshot } from './diff/baseline.js';
+import { diffModels } from './diff/diff.js';
+import type { ApiDiff } from './diff/types.js';
 import { SdkgenError } from './errors.js';
 import { generateTypeScript } from './generators/typescript/index.js';
 import { buildModel } from './ir/build.js';
@@ -37,6 +40,8 @@ export interface GenerateResult {
   model: ApiModel;
   names: SdkNames;
   plan: OutputPlan;
+  /** API changes since the spec the SDK was last generated from; undefined on the first run. */
+  changes: ApiDiff | undefined;
   /** False for dry runs. */
   written: boolean;
   diagnostics: Diagnostic[];
@@ -50,6 +55,10 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
 
   const spec = await loadSpec(config.inputPath, { validate: config.validate });
   const model = buildModel(spec.document, diagnostics);
+
+  // Read before anything is written: the snapshot is about to be replaced by the current spec.
+  const baseline = await readBaseline(config.outputDir, diagnostics);
+  const changes = baseline ? diffModels(baseline, model) : undefined;
 
   const previous = await readManifest(config.outputDir);
   if (previous.status === 'invalid') {
@@ -97,7 +106,18 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
     await applyPlan(plan);
   }
 
-  return { spec, model, names: output.names, plan, written: !options.dryRun, diagnostics: diagnostics.items };
+  return { spec, model, names: output.names, plan, changes, written: !options.dryRun, diagnostics: diagnostics.items };
+}
+
+async function readBaseline(outputDir: string, diagnostics: Diagnostics): Promise<ApiModel | undefined> {
+  try {
+    const snapshot = await loadSpecSnapshot(outputDir);
+    return snapshot && buildModel(snapshot.document);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    diagnostics.warn('SPEC_SNAPSHOT_INVALID', `Ignoring unreadable ${SPEC_SNAPSHOT_FILE} (${reason}); API changes are not listed for this run.`);
+    return undefined;
+  }
 }
 
 function assertSafeOutputDir(outputDir: string): void {
