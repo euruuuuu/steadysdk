@@ -8,6 +8,8 @@
 ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933?logo=node.js&logoColor=white)
 ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
 
+![steadysdk: typed TypeScript clients from OpenAPI that survive the 50th regeneration, not just the first](docs/images/hero.png)
+
 Most OpenAPI generators are "generate once and forget": re-running them overwrites everything, wipes out
 hand-written helpers, and silently renames methods when the spec shifts. steadysdk is built for the second,
 tenth and hundredth generation.
@@ -129,6 +131,11 @@ which `GeneratedClient` creates for you. Generated files have named regions for 
 body of each API file, and extra declarations at the end of `models.ts`. Code between the markers is carried
 into every new version of the file:
 
+![A hand-written findAvailablePet helper inside a steadysdk:custom region of the generated PetsApi class, and the error generate reports when a generated file is edited outside a region](docs/images/custom-regions.png)
+
+<details>
+<summary>The same code as text</summary>
+
 ```ts
 // sdk/generated/api/pets.ts
 export class PetsApi {
@@ -142,6 +149,8 @@ export class PetsApi {
   // </steadysdk:custom>
 }
 ```
+
+</details>
 
 The committed [Petstore example](examples/petstore/sdk/generated/api/pets.ts) carries this helper through every
 regeneration. If a region with code in it would disappear, for example because its tag was removed from the
@@ -170,8 +179,13 @@ current spec and config produce.
 Each run stores the spec it used in `.steadysdk/spec.json`. steadysdk compares that baseline with the current spec,
 so you see what changed in the API itself rather than which generated files changed:
 
+![steadysdk diff output for the Petstore example: 5 breaking and 7 non-breaking changes, and the version-bump check failing because 1.1.0 is not a new major version](docs/images/diff.png)
+
+<details>
+<summary>The same output as text</summary>
+
 ```console
-$ steadysdk diff
+$ steadysdk diff --require-bump
 Comparing sdk/.steadysdk/spec.json → openapi.yaml
 ℹ API changes in Swagger Petstore 1.0.0 → 1.1.0: 5 breaking, 7 non-breaking
     ! GET /pets: Query parameter `limit` is now required.
@@ -186,7 +200,10 @@ Comparing sdk/.steadysdk/spec.json → openapi.yaml
     - schema Order: Enum value `delivered` was removed from `status`.
     + schema Health: Added.
     ~ API: Default server URL changed from `https://petstore.example.com/v1` to `https://petstore.example.com/v2`.
+✖ 5 breaking changes, but info.version only went from 1.0.0 to 1.1.0. They need a new major version: 2.0.0 or later. (--require-bump)
 ```
+
+</details>
 
 `steadysdk generate` prints the same list while it runs, and `generate --check` prints it when it finds the SDK out
 of date. `steadysdk changelog` writes the changes as Markdown for a CHANGELOG, release or pull request. An excerpt
@@ -275,6 +292,8 @@ version is enough, as semver tooling treats 0.x. Versions that aren't semver, li
 change. Any argument can also name a file at a revision: `steadysdk diff main:openapi.yaml openapi.yaml`.
 
 ### GitHub Action
+
+![The GitHub Action's workflow file next to the job summary it writes on a pull request: the SDK is up to date, but a breaking change needs a new major version](docs/images/ci.png)
 
 ```yaml
 # .github/workflows/sdk.yml
