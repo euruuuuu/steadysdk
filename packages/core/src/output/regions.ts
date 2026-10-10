@@ -1,16 +1,16 @@
 /**
  * Custom regions: the parts of a generated file that belong to the user.
  *
- *     // <sdkgen:custom members>
+ *     // <steadysdk:custom members>
  *     ...your code, kept when the file is regenerated...
- *     // </sdkgen:custom>
+ *     // </steadysdk:custom>
  *
  * The generator emits them empty. On regeneration the bodies are carried over from the file on disk, and
  * edit detection hashes files with region bodies emptied, so only edits outside regions count as conflicts.
  */
 
-const OPEN = /^[ \t]*\/\/ <sdkgen:custom ([\w.-]+)>[ \t]*$/;
-const CLOSE = /^[ \t]*\/\/ <\/sdkgen:custom>[ \t]*$/;
+const OPEN = /^[ \t]*\/\/ <steadysdk:custom ([\w.-]+)>[ \t]*$/;
+const CLOSE = /^[ \t]*\/\/ <\/steadysdk:custom>[ \t]*$/;
 
 export type ParsedRegions = { ok: true; regions: Map<string, string[]> } | { ok: false; error: string };
 
@@ -38,7 +38,7 @@ export function parseRegions(content: string): ParsedRegions {
   return { ok: true, regions };
 }
 
-/** The content with every region body removed: what sdkgen wrote, minus the user's code. */
+/** The content with every region body removed: what steadysdk wrote, minus the user's code. */
 export function stripRegions(content: string): string {
   const out: string[] = [];
   let inside = false;
@@ -89,5 +89,5 @@ function hasCode(body: readonly string[]): boolean {
 
 /** The marker lines for an empty region, for generators. */
 export function emptyRegion(name: string): [string, string] {
-  return [`// <sdkgen:custom ${name}>`, '// </sdkgen:custom>'];
+  return [`// <steadysdk:custom ${name}>`, '// </steadysdk:custom>'];
 }

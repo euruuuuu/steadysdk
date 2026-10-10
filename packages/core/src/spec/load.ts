@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import type { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
-import { SdkgenError } from '../errors.js';
+import { SteadySdkError } from '../errors.js';
 import { canonicalJson, sha256 } from '../util/hash.js';
 import { semanticErrors } from './semantic.js';
 
@@ -36,7 +36,7 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
   if (!isUrl(resolved)) {
     const info = await stat(resolved).catch(() => undefined);
     if (!info?.isFile()) {
-      throw new SdkgenError('SPEC_NOT_FOUND', `OpenAPI spec not found: ${resolved}`, {
+      throw new SteadySdkError('SPEC_NOT_FOUND', `OpenAPI spec not found: ${resolved}`, {
         hint: 'Check the `input` path in your config, or pass --input <file>.',
       });
     }
@@ -46,7 +46,7 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
   try {
     document = (await SwaggerParser.bundle(resolved)) as OpenApiDocument;
   } catch (error) {
-    throw new SdkgenError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${resolved}`, {
+    throw new SteadySdkError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${resolved}`, {
       details: [errorMessage(error)],
       hint: 'The file must be valid YAML or JSON, and every external $ref must resolve.',
       cause: error,
@@ -55,15 +55,15 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
 
   const raw = document as unknown as Record<string, unknown>;
   if (typeof raw['swagger'] === 'string') {
-    throw new SdkgenError('SPEC_UNSUPPORTED', `Swagger ${raw['swagger']} documents are not supported`, {
+    throw new SteadySdkError('SPEC_UNSUPPORTED', `Swagger ${raw['swagger']} documents are not supported`, {
       hint: 'Convert the spec to OpenAPI 3 first, e.g. `npx swagger2openapi swagger.yaml -o openapi.yaml`.',
     });
   }
   const openapiVersion = typeof raw['openapi'] === 'string' ? raw['openapi'] : '';
   const dialect = openapiVersion.startsWith('3.0.') ? '3.0' : openapiVersion.startsWith('3.1.') ? '3.1' : undefined;
   if (!dialect) {
-    throw new SdkgenError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${openapiVersion || '(missing)'}"`, {
-      hint: 'sdkgen supports OpenAPI 3.0.x and 3.1.x.',
+    throw new SteadySdkError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${openapiVersion || '(missing)'}"`, {
+      hint: 'steadysdk supports OpenAPI 3.0.x and 3.1.x.',
     });
   }
 
@@ -76,7 +76,7 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
       details = validationDetails(error);
     }
     if (details.length > 0) {
-      throw new SdkgenError('SPEC_INVALID', `OpenAPI spec failed validation: ${resolved}`, {
+      throw new SteadySdkError('SPEC_INVALID', `OpenAPI spec failed validation: ${resolved}`, {
         details,
         hint: 'Fix the reported problems, or set `validate: false` in your config to generate anyway.',
       });

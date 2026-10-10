@@ -1,7 +1,7 @@
 {
-  "name": "@sdkgen/core",
+  "name": "@steadysdk/core",
   "version": "0.1.0",
-  "description": "Generation, naming and drift-detection engine behind the sdkgen CLI",
+  "description": "Generation, naming and drift-detection engine behind the steadysdk CLI",
   "license": "MIT",
   "type": "module",
   "exports": {

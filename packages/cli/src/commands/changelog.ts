@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { renderChangelog, serializeDiff } from '@sdkgen/core';
+import { renderChangelog, serializeDiff } from '@steadysdk/core';
 import type { Ui } from '../ui.js';
 import { compareSpecs, type DiffCommandOptions } from './diff.js';
 

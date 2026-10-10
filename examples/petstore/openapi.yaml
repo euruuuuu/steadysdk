@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Swagger Petstore
   version: 1.0.0
-  description: A sample pet store API used to demonstrate sdkgen.
+  description: A sample pet store API used to demonstrate steadysdk.
 servers:
   - url: https://petstore.example.com/{basePath}
     variables:

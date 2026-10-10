@@ -1,4 +1,4 @@
-import { changeSubject, type ApiDiff, type Change } from '@sdkgen/core';
+import { changeSubject, type ApiDiff, type Change } from '@steadysdk/core';
 import type { Ui } from './ui.js';
 
 export interface PrintChangesOptions {

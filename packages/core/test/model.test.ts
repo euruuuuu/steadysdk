@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Diagnostics } from '../src/diagnostics.js';
-import { SdkgenError } from '../src/errors.js';
+import { SteadySdkError } from '../src/errors.js';
 import { buildModel } from '../src/ir/build.js';
 import type { ObjectSchema } from '../src/ir/model.js';
 import { loadSpec } from '../src/spec/load.js';
@@ -31,12 +31,12 @@ describe('loadSpec', () => {
     ['invalid.yaml', 'SPEC_INVALID'],
   ])('reports %s as %s', async (file, code) => {
     const error = await loadSpec(path.join(FIXTURES, file)).catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(SdkgenError);
+    expect(error).toBeInstanceOf(SteadySdkError);
     expect(error).toMatchObject({ code });
   });
 
   it('explains validation failures', async () => {
-    const error = (await loadSpec(path.join(FIXTURES, 'invalid.yaml')).catch((caught: unknown) => caught)) as SdkgenError;
+    const error = (await loadSpec(path.join(FIXTURES, 'invalid.yaml')).catch((caught: unknown) => caught)) as SteadySdkError;
     expect(error.details.join('\n')).toMatch(/petId/);
     expect(error.hint).toMatch(/validate: false/);
   });

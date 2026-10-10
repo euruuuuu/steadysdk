@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { Argument, Command, CommanderError } from 'commander';
-import { SDKGEN_VERSION, TEMPLATE_NAMES } from '@sdkgen/core';
+import { STEADYSDK_VERSION, TEMPLATE_NAMES } from '@steadysdk/core';
 import { changelogCommand, type ChangelogCommandOptions } from './commands/changelog.js';
 import { diffCommand, type DiffCommandOptions } from './commands/diff.js';
 import { ejectCommand, type EjectCommandOptions } from './commands/eject.js';
@@ -16,9 +16,9 @@ interface GlobalOptions {
 /** Runs the CLI in-process and resolves to the exit code. */
 export async function run(argv: readonly string[], io: Io = defaultIo()): Promise<number> {
   let exitCode = 0;
-  const program = new Command('sdkgen')
+  const program = new Command('steadysdk')
     .description('Generate and maintain typed API client SDKs from OpenAPI specs')
-    .version(SDKGEN_VERSION, '-v, --version')
+    .version(STEADYSDK_VERSION, '-v, --version')
     .option('-C, --cwd <dir>', 'run as if started in <dir>')
     .option('--no-color', 'disable colored output')
     .showHelpAfterError()
@@ -46,7 +46,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
 
   program
     .command('init')
-    .description('create a .sdkgenrc.yml config in the current directory')
+    .description('create a .steadysdkrc.yml config in the current directory')
     .option('-i, --input <spec>', 'path or URL of the OpenAPI document (detected when omitted)')
     .option('-o, --output <dir>', 'output directory for the SDK', './sdk')
     .option('-f, --force', 'overwrite an existing config')
@@ -56,7 +56,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .command('generate')
     .alias('gen')
     .description('generate the SDK, keeping your own files and existing names intact')
-    .option('-c, --config <file>', 'config file (default: nearest .sdkgenrc.yml)')
+    .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
     .option('-i, --input <spec>', 'OpenAPI document, overriding the config')
     .option('-o, --output <dir>', 'output directory, overriding the config')
     .option('--no-validate', 'skip OpenAPI validation')
@@ -71,7 +71,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     command
       .argument('[old]', 'spec to compare from (default: the spec the SDK was last generated from)')
       .argument('[new]', 'spec to compare to (default: the configured input)')
-      .option('-c, --config <file>', 'config file (default: nearest .sdkgenrc.yml)')
+      .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
       .option('-i, --input <spec>', 'use this spec instead of the configured input as [new]')
       .option('--no-validate', 'skip OpenAPI validation')
       .option('--json', 'print the changes as JSON');
@@ -90,8 +90,8 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .command('eject')
     .description('copy a built-in template into your project to customize it')
     .addArgument(new Argument('<template>', 'template to copy').choices(TEMPLATE_NAMES))
-    .option('-c, --config <file>', 'config file (default: nearest .sdkgenrc.yml)')
-    .option('--out <file>', 'where to write it (default: templates.<template> from the config, or ./sdkgen/<template>.ts)')
+    .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
+    .option('--out <file>', 'where to write it (default: templates.<template> from the config, or ./steadysdk/<template>.ts)')
     .option('--stdout', 'print it instead, e.g. to compare with your copy')
     .option('-f, --force', 'replace an existing file')
     .action(action<EjectCommandOptions>(ejectCommand));

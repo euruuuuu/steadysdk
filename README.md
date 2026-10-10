@@ -1,20 +1,20 @@
-# sdkgen
+# steadysdk
 
 **Generate typed API clients from OpenAPI, and keep them maintainable as the API evolves.**
 
 Most OpenAPI generators are "generate once and forget": re-running them overwrites everything, wipes out
-hand-written helpers, and silently renames methods when the spec shifts. sdkgen is built for the second,
+hand-written helpers, and silently renames methods when the spec shifts. steadysdk is built for the second,
 tenth and hundredth generation.
 
-| Situation | Typical generator | sdkgen |
+| Situation | Typical generator | steadysdk |
 | --- | --- | --- |
 | First generation | Works | Works |
 | API adds an endpoint | Rewrites everything | Adds the new method; every other file is untouched |
 | You wrote a custom helper | Gets deleted | Lives in your own file or a custom region; kept on every run |
 | Someone hand-edits generated code | Silently overwritten | Detected; regeneration stops and tells you |
 | An `operationId` is renamed upstream | Your method is renamed (breaking) | Name pinned by the lock file until you opt in |
-| The API changes | You diff the YAML by hand | `sdkgen diff` lists every change and marks the breaking ones |
-| Release notes | Written by hand | `sdkgen changelog` writes them as Markdown or JSON |
+| The API changes | You diff the YAML by hand | `steadysdk diff` lists every change and marks the breaking ones |
+| Release notes | Written by hand | `steadysdk changelog` writes them as Markdown or JSON |
 | Naming conventions | Generator's choice, drifts | Your rules, in config, applied every time |
 | CI | — | `generate --check` fails when the SDK is stale; `diff --fail-on-breaking` on breaking changes |
 
@@ -25,10 +25,10 @@ tenth and hundredth generation.
 ## Quick start
 
 ```bash
-npm install --save-dev sdkgen     # not yet published; see "Development" to run from source
+npm install --save-dev steadysdk     # not yet published; see "Development" to run from source
 
-npx sdkgen init                   # writes .sdkgenrc.yml, detecting openapi.yaml/json
-npx sdkgen generate               # writes ./sdk
+npx steadysdk init                   # writes .steadysdkrc.yml, detecting openapi.yaml/json
+npx steadysdk generate               # writes ./sdk
 ```
 
 ```ts
@@ -49,7 +49,7 @@ See [`examples/petstore/sdk`](examples/petstore/sdk) for real output.
 
 ```
 sdk/
-├── generated/            ← owned by sdkgen, rewritten on every run. Edit only inside custom regions.
+├── generated/            ← owned by steadysdk, rewritten on every run. Edit only inside custom regions.
 │   ├── runtime.ts        fetch wrapper: auth, query/path/header serialization, errors, timeouts, hooks
 │   ├── models.ts         one type per components.schemas entry
 │   ├── api/pets.ts       one class per tag: PetsApi with listPets(), createPet(), ...
@@ -57,10 +57,10 @@ sdk/
 │   └── index.ts
 ├── client.ts             ← created once, then yours: class PetstoreClient extends GeneratedClient {}
 ├── index.ts              ← created once, then yours
-└── .sdkgen/              ← bookkeeping, commit it
+└── .steadysdk/              ← bookkeeping, commit it
     ├── manifest.json     hash of every generated file (detects hand edits and stale files)
     ├── names.lock.json   every assigned name (keeps names stable)
-    └── spec.json         the spec this SDK was generated from (the baseline for `sdkgen diff`)
+    └── spec.json         the spec this SDK was generated from (the baseline for `steadysdk diff`)
 ```
 
 Method signatures follow one rule: `method(params?, body?, options?)`, where `params` holds path, query, header
@@ -93,12 +93,12 @@ into every new version of the file:
 export class PetsApi {
   // ...generated methods...
 
-  // <sdkgen:custom members>
+  // <steadysdk:custom members>
   async findAvailablePet(name: string, options?: RequestOptions): Promise<Pet | undefined> {
     const pets = await this.listPets({ status: ['available'] }, options);
     return pets.find((pet) => pet.name === name);
   }
-  // </sdkgen:custom>
+  // </steadysdk:custom>
 }
 ```
 
@@ -108,30 +108,30 @@ spec, `generate` stops instead of dropping the code. It also stops if the marker
 `typescript.customRegions: false` to generate files without regions.
 
 **Hand edits to generated code are detected, never silently lost.** The manifest records a hash of each file
-sdkgen wrote, with custom regions left out. If a generated file changed outside its regions since then,
-`sdkgen generate` stops and lists it. Move the change into a region or out of `generated/`, or pass `--force` to
+steadysdk wrote, with custom regions left out. If a generated file changed outside its regions since then,
+`steadysdk generate` stops and lists it. Move the change into a region or out of `generated/`, or pass `--force` to
 overwrite it. Files that are no longer generated (say, a removed tag) are deleted, unless they were edited or
 hold region code, in which case they are kept and reported.
 
-**Names stay put.** Every name sdkgen assigns is recorded in `.sdkgen/names.lock.json` and reused on the
+**Names stay put.** Every name steadysdk assigns is recorded in `.steadysdk/names.lock.json` and reused on the
 next run. Concretely:
 
 - A new endpoint whose name collides with an existing one gets the suffix. The existing one keeps its name.
-- If the backend renames an `operationId`, your method keeps its name and sdkgen notes the difference.
-  `sdkgen generate --relock` adopts the new names when you are ready to make that change.
+- If the backend renames an `operationId`, your method keeps its name and steadysdk notes the difference.
+  `steadysdk generate --relock` adopts the new names when you are ready to make that change.
 - Changing your naming config re-derives names on purpose and lists every rename.
 
-**CI can enforce all of it.** `sdkgen generate --check` exits 1 if the committed SDK is not exactly what the
+**CI can enforce all of it.** `steadysdk generate --check` exits 1 if the committed SDK is not exactly what the
 current spec and config produce.
 
 ## API changes and breaking changes
 
-Each run stores the spec it used in `.sdkgen/spec.json`. sdkgen compares that baseline with the current spec,
+Each run stores the spec it used in `.steadysdk/spec.json`. steadysdk compares that baseline with the current spec,
 so you see what changed in the API itself rather than which generated files changed:
 
 ```console
-$ sdkgen diff
-Comparing sdk/.sdkgen/spec.json → openapi.yaml
+$ steadysdk diff
+Comparing sdk/.steadysdk/spec.json → openapi.yaml
 ℹ API changes in Swagger Petstore 1.0.0 → 1.1.0: 5 breaking, 7 non-breaking
     ! GET /pets: Query parameter `limit` is now required.
     ! GET /pets/{id}: Path parameter `petId` was renamed to `id`.
@@ -147,8 +147,8 @@ Comparing sdk/.sdkgen/spec.json → openapi.yaml
     ~ API: Default server URL changed from `https://petstore.example.com/v1` to `https://petstore.example.com/v2`.
 ```
 
-`sdkgen generate` prints the same list while it runs, and `generate --check` prints it when it finds the SDK out
-of date. `sdkgen changelog` writes the changes as Markdown for a CHANGELOG, release or pull request. An excerpt
+`steadysdk generate` prints the same list while it runs, and `generate --check` prints it when it finds the SDK out
+of date. `steadysdk changelog` writes the changes as Markdown for a CHANGELOG, release or pull request. An excerpt
 of the [full example](examples/petstore/next/CHANGELOG.md), generated from [this spec change](examples/petstore/next/openapi.yaml):
 
 ```markdown
@@ -164,12 +164,12 @@ of the [full example](examples/petstore/next/CHANGELOG.md), generated from [this
 ```
 
 ```bash
-sdkgen diff                        # changes since the last generation
-sdkgen diff -i candidate.yaml      # preview a new version of the spec against the SDK
-sdkgen diff old.yaml new.yaml      # any two specs; no config needed
-sdkgen diff --fail-on-breaking     # exit 1 on breaking changes, for CI
-sdkgen diff --json                 # versioned, machine-readable format
-sdkgen changelog --out CHANGES.md  # Markdown (or --json) to a file
+steadysdk diff                        # changes since the last generation
+steadysdk diff -i candidate.yaml      # preview a new version of the spec against the SDK
+steadysdk diff old.yaml new.yaml      # any two specs; no config needed
+steadysdk diff --fail-on-breaking     # exit 1 on breaking changes, for CI
+steadysdk diff --json                 # versioned, machine-readable format
+steadysdk changelog --out CHANGES.md  # Markdown (or --json) to a file
 ```
 
 **What counts as breaking.** A change is breaking when a client built for the old spec, or code written against
@@ -209,7 +209,7 @@ ignore:
 ```
 
 An entry that matches nothing is reported as a warning, so typos and entries left over from an older spec
-surface. The ignore list also applies to the changes `generate` lists, and to `sdkgen diff` and `changelog`
+surface. The ignore list also applies to the changes `generate` lists, and to `steadysdk diff` and `changelog`
 whenever they read the config (that is, unless you pass both spec files). Changes to endpoints the SDK leaves
 out are not reported.
 
@@ -220,18 +220,18 @@ wrapper. To change it (retries, a different HTTP library, tracing), copy it into
 config at your copy:
 
 ```bash
-sdkgen eject runtime          # writes ./sdkgen/runtime.ts and prints the config line to add
+steadysdk eject runtime          # writes ./steadysdk/runtime.ts and prints the config line to add
 ```
 
 ```yaml
 templates:
-  runtime: ./sdkgen/runtime.ts
+  runtime: ./steadysdk/runtime.ts
 ```
 
-sdkgen then uses your copy instead of the built-in runtime. If your copy no longer exports something the generated
+steadysdk then uses your copy instead of the built-in runtime. If your copy no longer exports something the generated
 code imports, `generate` lists exactly what is missing. The copy records which version of the built-in runtime it
-started from, so when a newer sdkgen ships a changed runtime, `generate` warns you to review it
-(`sdkgen eject runtime --stdout` prints the current one).
+started from, so when a newer steadysdk ships a changed runtime, `generate` warns you to review it
+(`steadysdk eject runtime --stdout` prints the current one).
 
 **A header for every file**, such as a license notice:
 
@@ -243,7 +243,7 @@ templates:
 
 ## Naming conventions
 
-Everything is driven by `.sdkgenrc.yml`; [`.sdkgenrc.example.yml`](.sdkgenrc.example.yml) documents every
+Everything is driven by `.steadysdkrc.yml`; [`.steadysdkrc.example.yml`](.steadysdkrc.example.yml) documents every
 option with its default.
 
 ```yaml
@@ -286,13 +286,13 @@ built-ins or with each other are resolved deterministically and reported.
 ## CLI
 
 ```
-sdkgen init        [-i spec] [-o dir] [--force]
-sdkgen generate    [-c config] [-i spec] [-o dir] [--dry-run] [--check] [--relock] [--force]
-                   [--no-validate] [--verbose]
-sdkgen diff        [old] [new] [-c config] [-i spec] [--json] [--fail-on-breaking] [--no-validate]
-sdkgen changelog   [old] [new] [-c config] [-i spec] [--json] [--out file] [--no-validate]
-sdkgen eject       runtime [-c config] [--out file] [--stdout] [--force]
-global:            [-C, --cwd dir] [--no-color]
+steadysdk init        [-i spec] [-o dir] [--force]
+steadysdk generate    [-c config] [-i spec] [-o dir] [--dry-run] [--check] [--relock] [--force]
+                      [--no-validate] [--verbose]
+steadysdk diff        [old] [new] [-c config] [-i spec] [--json] [--fail-on-breaking] [--no-validate]
+steadysdk changelog   [old] [new] [-c config] [-i spec] [--json] [--out file] [--no-validate]
+steadysdk eject       runtime [-c config] [--out file] [--stdout] [--force]
+global:               [-C, --cwd dir] [--no-color]
 ```
 
 `old` defaults to the spec the SDK was last generated from and `new` to the configured input.
@@ -316,9 +316,9 @@ and a hint.
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | A | Spec loading, model, naming engine, name lock, TypeScript generator, `init` / `generate` | ✅ Done |
-| B | Changelog & drift detection: `sdkgen diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
-| C | Maintenance: custom regions in generated files, ignore lists, template overrides (`sdkgen eject`) | ✅ Done |
-| D | `sdkgen watch`, CI gating on breaking changes without a version bump, GitHub Action | Next |
+| B | Changelog & drift detection: `steadysdk diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
+| C | Maintenance: custom regions in generated files, ignore lists, template overrides (`steadysdk eject`) | ✅ Done |
+| D | `steadysdk watch`, CI gating on breaking changes without a version bump, GitHub Action | Next |
 | E | VS Code extension (generate/diff commands, out-of-sync status bar), npm publish | Planned |
 
 ## Development
@@ -332,7 +332,7 @@ npm run examples       # regenerate examples/petstore/sdk and next/CHANGELOG.md 
 ```
 
 Layout: [`packages/core`](packages/core) holds the engine (spec loading, IR, naming, generators, output
-planning, diff); [`packages/cli`](packages/cli) is the `sdkgen` command.
+planning, diff); [`packages/cli`](packages/cli) is the `steadysdk` command.
 
 ## License
 

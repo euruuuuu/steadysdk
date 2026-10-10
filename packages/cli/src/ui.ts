@@ -1,6 +1,6 @@
 import path from 'node:path';
 import pc from 'picocolors';
-import { isSdkgenError, type Diagnostic } from '@sdkgen/core';
+import { isSteadySdkError, type Diagnostic } from '@steadysdk/core';
 
 export interface Io {
   stdout: (text: string) => void;
@@ -72,13 +72,13 @@ export class Ui {
   }
 
   error(error: unknown): void {
-    if (isSdkgenError(error)) {
+    if (isSteadySdkError(error)) {
       this.fail(error.message);
       for (const detail of error.details) this.io.stderr(`  ${this.colors.dim('•')} ${detail}\n`);
       if (error.hint) this.io.stderr(`  ${this.colors.cyan('Hint:')} ${error.hint}\n`);
       return;
     }
-    this.fail('Unexpected error — this is a bug in sdkgen, please report it.');
+    this.fail('Unexpected error — this is a bug in steadysdk, please report it.');
     this.io.stderr(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
   }
 

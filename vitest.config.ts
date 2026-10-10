@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: {
     // Tests run against sources, so `npm test` works without a prior build.
     alias: {
-      '@sdkgen/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
+      '@steadysdk/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
     },
   },
   test: {

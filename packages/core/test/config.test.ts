@@ -19,8 +19,8 @@ describe('config', () => {
     });
   });
 
-  it('documents every option in .sdkgenrc.example.yml, with the real defaults', async () => {
-    const example = parseYaml(await readFile(path.join(REPO_ROOT, '.sdkgenrc.example.yml'), 'utf8'));
+  it('documents every option in .steadysdkrc.example.yml, with the real defaults', async () => {
+    const example = parseYaml(await readFile(path.join(REPO_ROOT, '.steadysdkrc.example.yml'), 'utf8'));
     const parsed = parseConfig(example);
     const { naming: { operations: { actions: _actions, ...operations }, ...naming }, ...rest } = configSchema.parse({ input: './openapi.yaml' });
     const { naming: { operations: { actions: _exampleActions, ...exampleOperations }, ...exampleNaming }, ...exampleRest } = parsed;
@@ -52,11 +52,11 @@ describe('config', () => {
 
   it('finds the config in a parent directory and resolves paths against it', async () => {
     const root = await tempDir();
-    await writeFile(path.join(root, '.sdkgenrc.yml'), 'input: specs/api.yaml\noutput: out/sdk\n');
+    await writeFile(path.join(root, '.steadysdkrc.yml'), 'input: specs/api.yaml\noutput: out/sdk\n');
     const nested = path.join(root, 'a', 'b');
     await mkdir(nested, { recursive: true });
 
-    expect(await findConfigFile(nested)).toBe(path.join(root, '.sdkgenrc.yml'));
+    expect(await findConfigFile(nested)).toBe(path.join(root, '.steadysdkrc.yml'));
     const config = await loadConfig({ cwd: nested });
     expect(config.inputPath).toBe(path.join(root, 'specs/api.yaml'));
     expect(config.outputDir).toBe(path.join(root, 'out/sdk'));
@@ -64,7 +64,7 @@ describe('config', () => {
 
   it('resolves flag overrides against the working directory', async () => {
     const root = await tempDir();
-    await writeFile(path.join(root, '.sdkgenrc.yml'), 'input: api.yaml\n');
+    await writeFile(path.join(root, '.steadysdkrc.yml'), 'input: api.yaml\n');
     const nested = path.join(root, 'sub');
     await mkdir(nested);
     const config = await loadConfig({ cwd: nested, overrides: { input: 'other.yaml', output: 'gen' } });
@@ -86,7 +86,7 @@ describe('config', () => {
 
   it('reports YAML syntax errors', async () => {
     const dir = await tempDir();
-    await writeFile(path.join(dir, '.sdkgenrc.yml'), 'input: [unclosed\n');
+    await writeFile(path.join(dir, '.steadysdkrc.yml'), 'input: [unclosed\n');
     await expect(loadConfig({ cwd: dir })).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
   });
 });

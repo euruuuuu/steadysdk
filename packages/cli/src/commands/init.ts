@@ -1,6 +1,6 @@
 import { readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { parseConfig, SdkgenError } from '@sdkgen/core';
+import { parseConfig, SteadySdkError } from '@steadysdk/core';
 import { parse as parseYaml } from 'yaml';
 import type { Ui } from '../ui.js';
 
@@ -10,20 +10,20 @@ export interface InitCommandOptions {
   force?: boolean;
 }
 
-export const CONFIG_FILE = '.sdkgenrc.yml';
+export const CONFIG_FILE = '.steadysdkrc.yml';
 
 const SPEC_CANDIDATES = /^(openapi|swagger|api|spec)([.-][\w.-]+)?\.(ya?ml|json)$/i;
 
 export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<number> {
   const target = path.join(ui.io.cwd, CONFIG_FILE);
   if (!options.force && (await stat(target).catch(() => undefined))) {
-    throw new SdkgenError('CONFIG_EXISTS', `${CONFIG_FILE} already exists`, { hint: 'Pass --force to overwrite it.' });
+    throw new SteadySdkError('CONFIG_EXISTS', `${CONFIG_FILE} already exists`, { hint: 'Pass --force to overwrite it.' });
   }
 
   const input = options.input ?? (await detectSpec(ui.io.cwd));
   const output = options.output ?? './sdk';
   const content = configTemplate(input ?? './openapi.yaml', output);
-  parseConfig(parseYaml(content), 'init template'); // never write a config sdkgen itself would reject
+  parseConfig(parseYaml(content), 'init template'); // never write a config steadysdk itself would reject
 
   await writeFile(target, content, 'utf8');
   ui.success(`Created ${ui.c.bold(CONFIG_FILE)}`);
@@ -35,7 +35,7 @@ export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<
   ui.line();
   ui.line('Next steps:');
   ui.line(`  1. Review naming rules in ${CONFIG_FILE}`);
-  ui.line(`  2. Run ${ui.c.cyan('sdkgen generate')}`);
+  ui.line(`  2. Run ${ui.c.cyan('steadysdk generate')}`);
   return 0;
 }
 
@@ -50,13 +50,13 @@ function rank(file: string): number {
 }
 
 function configTemplate(input: string, output: string): string {
-  return `# sdkgen configuration. Paths are relative to this file.
-# Every option is documented in .sdkgenrc.example.yml in the sdkgen repository.
+  return `# steadysdk configuration. Paths are relative to this file.
+# Every option is documented in .steadysdkrc.example.yml in the steadysdk repository.
 
 # OpenAPI 3.0 / 3.1 document: YAML or JSON, file path or URL.
 input: ${yamlString(input)}
 
-# Where the SDK goes. sdkgen owns <output>/generated/ and .sdkgen/; everything else there is yours.
+# Where the SDK goes. steadysdk owns <output>/generated/ and .steadysdk/; everything else there is yours.
 output: ${yamlString(output)}
 
 client:
@@ -76,7 +76,7 @@ naming:
     # suffix: Dto
   parameters:
     case: camel
-  # Keep names stable across regenerations (.sdkgen/names.lock.json).
+  # Keep names stable across regenerations (.steadysdk/names.lock.json).
   lock: true
   overrides:
     operations: {}        # "GET /users/{id}": fetchUser   or   listPets: getAllPets

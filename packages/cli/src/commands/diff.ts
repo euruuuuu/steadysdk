@@ -6,12 +6,12 @@ import {
   loadConfig,
   loadSpec,
   loadSpecSnapshot,
-  SdkgenError,
+  SteadySdkError,
   serializeDiff,
   type ApiDiff,
   type LoadedSpec,
   type ResolvedConfig,
-} from '@sdkgen/core';
+} from '@steadysdk/core';
 import { printChanges } from '../changes.js';
 import type { Ui } from '../ui.js';
 
@@ -32,7 +32,7 @@ export interface ComparedSpecs {
 
 /**
  * Resolves the two sides of a comparison. `old` defaults to the spec the SDK was last generated from
- * (`<output>/.sdkgen/spec.json`), `new` to the configured input; a config is only needed for those defaults.
+ * (`<output>/.steadysdk/spec.json`), `new` to the configured input; a config is only needed for those defaults.
  */
 export async function compareSpecs(
   ui: Ui,
@@ -66,8 +66,8 @@ export async function compareSpecs(
 async function lastGenerated(ui: Ui, config: ResolvedConfig): Promise<LoadedSpec> {
   const snapshot = await loadSpecSnapshot(config.outputDir);
   if (snapshot) return snapshot;
-  throw new SdkgenError('BASELINE_NOT_FOUND', `No generated SDK found in ${ui.rel(config.outputDir)} to compare against`, {
-    hint: 'Run `sdkgen generate` first, or compare two files: `sdkgen diff old.yaml new.yaml`.',
+  throw new SteadySdkError('BASELINE_NOT_FOUND', `No generated SDK found in ${ui.rel(config.outputDir)} to compare against`, {
+    hint: 'Run `steadysdk generate` first, or compare two files: `steadysdk diff old.yaml new.yaml`.',
   });
 }
 
