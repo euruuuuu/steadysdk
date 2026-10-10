@@ -1,6 +1,6 @@
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ejectTemplate, isApiSteadyError, loadConfig, ApiSteadyError, type ResolvedConfig, type TemplateName } from '@apisteady/core';
+import { ejectTemplate, isSteadySdkError, loadConfig, SteadySdkError, type ResolvedConfig, type TemplateName } from '@steadysdk/core';
 import type { Ui } from '../ui.js';
 
 export interface EjectCommandOptions {
@@ -21,9 +21,9 @@ export async function ejectCommand(ui: Ui, options: EjectCommandOptions, [name]:
 
   const config = await findConfig(ui, options.config);
   const base = config?.rootDir ?? ui.io.cwd;
-  const target = options.out !== undefined ? path.resolve(ui.io.cwd, options.out) : (config?.runtimeTemplatePath ?? path.join(base, 'apisteady', `${template}.ts`));
+  const target = options.out !== undefined ? path.resolve(ui.io.cwd, options.out) : (config?.runtimeTemplatePath ?? path.join(base, 'steadysdk', `${template}.ts`));
   if (!options.force && (await stat(target).catch(() => undefined))) {
-    throw new ApiSteadyError('FILE_EXISTS', `${ui.rel(target)} already exists`, {
+    throw new SteadySdkError('FILE_EXISTS', `${ui.rel(target)} already exists`, {
       hint: 'Pass --force to replace it (your changes to it are lost), or --stdout to compare it with the built-in version.',
     });
   }
@@ -32,10 +32,10 @@ export async function ejectCommand(ui: Ui, options: EjectCommandOptions, [name]:
 
   ui.success(`Copied the built-in ${template} template to ${ui.c.bold(ui.rel(target))}`);
   if (config?.runtimeTemplatePath === target) {
-    ui.line(`apisteady uses it for generated/${template}.ts from the next run on.`);
+    ui.line(`steadysdk uses it for generated/${template}.ts from the next run on.`);
   } else {
     const relative = path.relative(base, target).split(path.sep).join('/');
-    ui.line(`To use it, add this to ${config?.configPath ? ui.rel(config.configPath) : 'your apisteady config'}:`);
+    ui.line(`To use it, add this to ${config?.configPath ? ui.rel(config.configPath) : 'your steadysdk config'}:`);
     ui.line(ui.c.cyan(`  templates:\n    ${template}: ${relative.startsWith('.') ? relative : `./${relative}`}`));
   }
   return 0;
@@ -45,7 +45,7 @@ async function findConfig(ui: Ui, configPath: string | undefined): Promise<Resol
   try {
     return await loadConfig({ cwd: ui.io.cwd, configPath });
   } catch (error) {
-    if (isApiSteadyError(error) && error.code === 'CONFIG_NOT_FOUND' && configPath === undefined) return undefined;
+    if (isSteadySdkError(error) && error.code === 'CONFIG_NOT_FOUND' && configPath === undefined) return undefined;
     throw error;
   }
 }

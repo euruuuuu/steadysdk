@@ -3,7 +3,7 @@
   "info": {
     "title": "Swagger Petstore",
     "version": "1.0.0",
-    "description": "A sample pet store API used to demonstrate apisteady."
+    "description": "A sample pet store API used to demonstrate steadysdk."
   },
   "servers": [
     {

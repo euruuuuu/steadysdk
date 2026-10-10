@@ -44,9 +44,9 @@ describe('generated runtime', () => {
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
 
     // tempDir() cleans up per test, so generate into a directory that lives for the whole file.
-    const dir = path.join(PETSTORE_DIR, '..', '..', 'node_modules', '.cache', 'apisteady-runtime-test');
+    const dir = path.join(PETSTORE_DIR, '..', '..', 'node_modules', '.cache', 'steadysdk-runtime-test');
     await cp(path.join(PETSTORE_DIR, 'openapi.yaml'), path.join(dir, 'openapi.yaml'));
-    await cp(path.join(PETSTORE_DIR, '.apisteadyrc.yml'), path.join(dir, '.apisteadyrc.yml'));
+    await cp(path.join(PETSTORE_DIR, '.steadysdkrc.yml'), path.join(dir, '.steadysdkrc.yml'));
     await generate({ config: await loadConfig({ cwd: dir }), force: true });
     sdk = await import(pathToFileURL(path.join(dir, 'sdk', 'index.ts')).href);
   });

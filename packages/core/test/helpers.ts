@@ -40,7 +40,7 @@ export function apiModel(yaml: string): ApiModel {
 
 /** A fresh temp directory, removed when the current test finishes. */
 export async function tempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'apisteady-test-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'steadysdk-test-'));
   onTestFinished(() => rm(dir, { recursive: true, force: true }));
   return dir;
 }

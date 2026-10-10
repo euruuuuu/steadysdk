@@ -1,6 +1,6 @@
-# @apisteady/core
+# @steadysdk/core
 
-The engine behind the [apisteady](https://www.npmjs.com/package/apisteady) CLI. Most people want the CLI; use
+The engine behind the [steadysdk](https://www.npmjs.com/package/@steadysdk/cli) CLI. Most people want the CLI; use
 this package to build your own tooling on the same pieces:
 
 - **Spec loading:** OpenAPI 3.0 / 3.1 and Swagger 2.0, from files, URLs or git revisions, multi-file specs included
@@ -9,7 +9,7 @@ this package to build your own tooling on the same pieces:
 - **The TypeScript generator**, with the name lock and the output planner that protects hand-written code
 
 ```ts
-import { buildModel, checkVersionBump, diffModels, loadSpec, renderChangelog } from '@apisteady/core';
+import { buildModel, checkVersionBump, diffModels, loadSpec, renderChangelog } from '@steadysdk/core';
 
 // What changed in the spec since main, and is the version bump big enough?
 const before = buildModel((await loadSpec('openapi.yaml', { revision: 'main' })).document);
@@ -21,7 +21,7 @@ if (!checkVersionBump(diff).ok) process.exitCode = 1;
 ```
 
 ```ts
-import { generate, loadConfig } from '@apisteady/core';
+import { generate, loadConfig } from '@steadysdk/core';
 
 const result = await generate({ config: await loadConfig(), dryRun: true });
 console.log(result.plan.changes, result.changes?.summary);

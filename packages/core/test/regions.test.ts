@@ -3,21 +3,21 @@ import { mergeRegions, parseRegions, regionsWithCode, stripRegions } from '../sr
 
 const generated = [
   'import { a } from "./a.js";',
-  '// <apisteady:custom imports>',
-  '// </apisteady:custom>',
+  '// <steadysdk:custom imports>',
+  '// </steadysdk:custom>',
   '',
   'export class Api {',
   '  method() {}',
   '',
-  '  // <apisteady:custom members>',
-  '  // </apisteady:custom>',
+  '  // <steadysdk:custom members>',
+  '  // </steadysdk:custom>',
   '}',
   '',
 ].join('\n');
 
 const edited = generated
-  .replace('// <apisteady:custom imports>\n', '// <apisteady:custom imports>\nimport { b } from "./b.js";\n')
-  .replace('  // <apisteady:custom members>\n', '  // <apisteady:custom members>\n  helper() {\n    return b;\n  }\n');
+  .replace('// <steadysdk:custom imports>\n', '// <steadysdk:custom imports>\nimport { b } from "./b.js";\n')
+  .replace('  // <steadysdk:custom members>\n', '  // <steadysdk:custom members>\n  helper() {\n    return b;\n  }\n');
 
 describe('custom regions', () => {
   it('parses region bodies by name', () => {
@@ -44,20 +44,20 @@ describe('custom regions', () => {
     const merged = mergeRegions(fresh, parsed.regions);
     expect(merged.orphaned).toEqual([]);
     expect(merged.content).toContain('  other() {}');
-    expect(merged.content).toContain('  helper() {\n    return b;\n  }\n  // </apisteady:custom>');
+    expect(merged.content).toContain('  helper() {\n    return b;\n  }\n  // </steadysdk:custom>');
     expect(stripRegions(merged.content)).toBe(fresh);
 
-    const withoutMembers = fresh.replace('  // <apisteady:custom members>\n  // </apisteady:custom>\n', '');
+    const withoutMembers = fresh.replace('  // <steadysdk:custom members>\n  // </steadysdk:custom>\n', '');
     expect(mergeRegions(withoutMembers, parsed.regions).orphaned).toEqual(['members']);
     // Empty regions can disappear without losing anything.
     expect(mergeRegions(withoutMembers, new Map([['members', ['']]])).orphaned).toEqual([]);
   });
 
   it.each([
-    ['// <apisteady:custom a>\n// <apisteady:custom b>\n// </apisteady:custom>\n// </apisteady:custom>', 'region "a" (line 1) is not closed before line 2'],
-    ['// <apisteady:custom a>\nx', 'region "a" (line 1) is never closed'],
-    ['x\n// </apisteady:custom>', 'line 2 closes a region that was never opened'],
-    ['// <apisteady:custom a>\n// </apisteady:custom>\n// <apisteady:custom a>\n// </apisteady:custom>', 'region "a" appears twice'],
+    ['// <steadysdk:custom a>\n// <steadysdk:custom b>\n// </steadysdk:custom>\n// </steadysdk:custom>', 'region "a" (line 1) is not closed before line 2'],
+    ['// <steadysdk:custom a>\nx', 'region "a" (line 1) is never closed'],
+    ['x\n// </steadysdk:custom>', 'line 2 closes a region that was never opened'],
+    ['// <steadysdk:custom a>\n// </steadysdk:custom>\n// <steadysdk:custom a>\n// </steadysdk:custom>', 'region "a" appears twice'],
   ])('rejects broken markers %#', (content, error) => {
     expect(parseRegions(content)).toEqual({ ok: false, error });
   });

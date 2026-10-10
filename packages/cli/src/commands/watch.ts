@@ -1,4 +1,4 @@
-import { generate, ApiSteadyError, type ResolvedConfig } from '@apisteady/core';
+import { generate, SteadySdkError, type ResolvedConfig } from '@steadysdk/core';
 import type { Ui } from '../ui.js';
 import { FileWatcher } from '../watcher.js';
 import { loadGenerateConfig, printGeneration, type GenerateCommandOptions } from './generate.js';
@@ -80,8 +80,8 @@ export async function watchCommand(ui: Ui, options: WatchCommandOptions): Promis
 
 function assertWatchable(config: ResolvedConfig): void {
   if (/^https?:\/\//i.test(config.inputPath)) {
-    throw new ApiSteadyError('WATCH_UNSUPPORTED', `Cannot watch ${config.inputPath}: it is a URL`, {
-      hint: 'Watch mode needs the spec on disk. Download it, or run `apisteady generate` when it changes.',
+    throw new SteadySdkError('WATCH_UNSUPPORTED', `Cannot watch ${config.inputPath}: it is a URL`, {
+      hint: 'Watch mode needs the spec on disk. Download it, or run `steadysdk generate` when it changes.',
     });
   }
 }

@@ -1,13 +1,13 @@
-# apisteady — OpenAPI SDK generator & maintainer
+# steadysdk — OpenAPI SDK generator & maintainer
 
 TypeScript CLI that generates typed API clients from OpenAPI 3.0/3.1 (and Swagger 2.0) and keeps them maintainable across
 regenerations: user code is never overwritten, names stay stable (name lock), and API changes are reported
 as a changelog with breaking-change detection. Portfolio project (featured on the author's portfolio site); README.md is the public face.
-Repo: github.com/euruuuuu/steadysdk (the repo keeps its old name unless the user renames it). Names: started as
-`sdkgen`, renamed to `steadysdk`, then to `apisteady` on 2026-10-10 before any npm release, because npm rejects
-`steadysdk` as too similar to the existing `steady-sdk`. npm packages: `apisteady` (CLI, bin `apisteady`) and
-`@apisteady/core`; the user owns the `apisteady` npm org. Config `.apisteadyrc.yml`, bookkeeping
-`<output>/.apisteady/`, region markers `// <apisteady:custom name>`.
+Repo: github.com/euruuuuu/steadysdk. Name history (all 2026-10-10): `sdkgen` → `steadysdk` → `apisteady` → back to
+`steadysdk`. npm rejects the plain name `steadysdk` as too similar to the existing `steady-sdk`, so the packages are
+scoped: `@steadysdk/cli` (command `steadysdk`) and `@steadysdk/core`; the user owns the `steadysdk` npm org (and
+`apisteady`, where `apisteady@0.1.0` / `@apisteady/core@0.1.0` were briefly published). Config `.steadysdkrc.yml`,
+bookkeeping `<output>/.steadysdk/`, region markers `// <steadysdk:custom name>`.
 
 ## Workflow
 
@@ -24,9 +24,9 @@ Repo: github.com/euruuuuu/steadysdk (the repo keeps its old name unless the user
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | A | Workspace, spec loading + validation, IR, naming engine + name lock, TS generator, output planner (manifest, conflicts, stale deletion), CLI `init`/`generate` (`--dry-run --check --relock --force`), petstore example, CI | ✅ Done 2026-10-10 |
-| B | Drift/changelog: IR-level diff (ops, params, bodies, responses, schemas, enums, required flags, security, servers), direction-aware breaking classification, Markdown + versioned JSON, `apisteady diff` (`--json --fail-on-breaking -i`) / `apisteady changelog` (`--out`), changes listed by `generate` (and `--check`), petstore `next/` changelog example | ✅ Done 2026-10-10 |
-| C | Custom regions (`// <apisteady:custom name>`) in generated files (API imports/members, models declarations) merged on regeneration; `ignore` (operations/paths/tags/schemas/unusedSchemas, unmatched-entry warnings); `templates.runtime` override + `apisteady eject runtime` (export contract check, fingerprint outdated warning), `templates.header`; Petstore example carries a region helper | ✅ Done 2026-10-10 |
-| D | `apisteady watch` (directory watches, debounce, keeps going on errors, `Io.signal`); specs at git revisions (`loadSpec({revision})`, custom ref-parser resolver, `--base`, `<rev>:<path>`); `diff --require-bump` (`checkVersionBump`); composite GitHub Action (`action.yml` + `scripts/github-action.sh`, tested locally in a temp repo, dogfooded in CI) | ✅ Done 2026-10-10 |
+| B | Drift/changelog: IR-level diff (ops, params, bodies, responses, schemas, enums, required flags, security, servers), direction-aware breaking classification, Markdown + versioned JSON, `steadysdk diff` (`--json --fail-on-breaking -i`) / `steadysdk changelog` (`--out`), changes listed by `generate` (and `--check`), petstore `next/` changelog example | ✅ Done 2026-10-10 |
+| C | Custom regions (`// <steadysdk:custom name>`) in generated files (API imports/members, models declarations) merged on regeneration; `ignore` (operations/paths/tags/schemas/unusedSchemas, unmatched-entry warnings); `templates.runtime` override + `steadysdk eject runtime` (export contract check, fingerprint outdated warning), `templates.header`; Petstore example carries a region helper | ✅ Done 2026-10-10 |
+| D | `steadysdk watch` (directory watches, debounce, keeps going on errors, `Io.signal`); specs at git revisions (`loadSpec({revision})`, custom ref-parser resolver, `--base`, `<rev>:<path>`); `diff --require-bump` (`checkVersionBump`); composite GitHub Action (`action.yml` + `scripts/github-action.sh`, tested locally in a temp repo, dogfooded in CI) | ✅ Done 2026-10-10 |
 | E | Release prep: real-world suite (`scripts/real-world.mjs`, GitHub/Stripe/OpenAI/Twilio/Kubernetes pinned) and what it surfaced (`groupBy: auto`, 3.1 null-variant normalization, wrapped imports, unsupported-version errors); Swagger 2.0 (built-in converter); webhooks (IR, `generated/webhooks.ts`, diff); npm packaging (metadata, READMEs, LICENSE, clean `prepack`, no source maps; verified by installing the tarballs); polished `init`; CHANGELOG.md; tag `v0.1.0` | ✅ Done 2026-10-10 (npm publish waits on the user's npm login) |
 | F | VS Code extension reusing core (commands, out-of-sync status bar, CodeLens) | Next |
 
@@ -60,17 +60,17 @@ packages/core/src
                        webhooks. Component schema refs stay `{kind:'ref', target: key}`; others are inlined.
   ir/refs.ts           refsOf / reachability / mapRefs over SchemaNode (shared by ignore and diff)
   ir/ignore.ts         applyIgnore(model, config.ignore): drops ops/schemas, ignored refs → unknown, warns on unmatched
-  config/schema.ts     zod schema for .apisteadyrc.yml (strict objects; use .prefault({}) for nested defaults in Zod 4)
+  config/schema.ts     zod schema for .steadysdkrc.yml (strict objects; use .prefault({}) for nested defaults in Zod 4)
   config/load.ts       upward config search; config paths relative to config file, CLI flag paths relative to cwd
   naming/case.ts       splitWords / applyCase / acronyms
   naming/engine.ts     NamingEngine: stateless desired names (operationId or path templates, overrides, groups, params)
   naming/assign.ts     assignNames: uniqueness per scope + lock. Locked names claimed first; config hash change → re-derive
-  naming/lock.ts       .apisteady/names.lock.json (identity → name; identities like `operation:GET /pets#params`)
+  naming/lock.ts       .steadysdk/names.lock.json (identity → name; identities like `operation:GET /pets#params`)
   generators/typescript/  index.ts (files, header, regions, runtime export contract), operations.ts (methods, media
                        selection), types.ts (SchemaNode → TS), code.ts (writer), templates.ts (built-in/override
                        runtime, eject + fingerprint)
-  output/manifest.ts   .apisteady/manifest.json: sha256 of every generated file
-  output/regions.ts    parse/strip/merge `// <apisteady:custom name>` … `// </apisteady:custom>` regions
+  output/manifest.ts   .steadysdk/manifest.json: sha256 of every generated file
+  output/regions.ts    parse/strip/merge `// <steadysdk:custom name>` … `// </steadysdk:custom>` regions
   output/plan.ts       planOutput (create/update/delete/unchanged/keep + conflicts incl. region-removed /
                        regions-invalid; region code merged into new content) and applyPlan; describeConflict
   diff/schema.ts       SchemaComparer: structural, direction-aware (request/response/both) schema diff; same-target refs
@@ -80,7 +80,7 @@ packages/core/src
                        responses, media types, security (collapsed to one `api` change when every op changed alike),
                        component schemas (direction from usage in both versions), security schemes, default server
   diff/render.ts       renderChangelog (Markdown), serializeDiff (JSON), diffTitle, changeSubject
-  diff/baseline.ts     loadSpecSnapshot(outputDir): `.apisteady/spec.json`, loaded without validation
+  diff/baseline.ts     loadSpecSnapshot(outputDir): `.steadysdk/spec.json`, loaded without validation
   diff/version.ts      checkVersionBump: breaking → new major info.version (new minor in 0.x; non-semver must change)
   generate.ts          orchestrator: load → model → ignore → baseline diff (ignore applied too) → lock → runtime
                        template → generate → plan → (refuse on conflicts unless force) → write
@@ -93,8 +93,8 @@ action.yml             composite GitHub Action: Node check/setup, builds the CLI
 scripts/real-world.mjs pinned public specs → generate → strict tsc; prints a Markdown table (weekly workflow too)
 ```
 
-Output layout: `<out>/generated/**` (apisteady-owned, manifest-tracked), `<out>/index.ts` + `<out>/client.ts`
-(scaffolded once, user-owned), `<out>/.apisteady/{manifest,names.lock,spec}.json` (commit them).
+Output layout: `<out>/generated/**` (steadysdk-owned, manifest-tracked), `<out>/index.ts` + `<out>/client.ts`
+(scaffolded once, user-owned), `<out>/.steadysdk/{manifest,names.lock,spec}.json` (commit them).
 
 ## Rules
 
@@ -102,14 +102,14 @@ Output layout: `<out>/generated/**` (apisteady-owned, manifest-tracked), `<out>/
 - Generated TS must compile under the strictest flags (see `typecheck()` in packages/core/test/generate.test.ts):
   `import type` for types, no parameter properties/enums (erasableSyntaxOnly), explicit types (isolatedDeclarations),
   never emit an unused import.
-- Never delete or overwrite a file apisteady did not write: only manifest-listed files whose hash matches are touched;
+- Never delete or overwrite a file steadysdk did not write: only manifest-listed files whose hash matches are touched;
   anything else is a conflict (`OUTPUT_CONFLICT`) unless `--force`. Manifest hashes are of the content with custom
   region bodies stripped (generators emit regions empty, so that equals the generated content); region code must
   never be dropped silently: orphaned regions or broken markers are conflicts, stale files with region code are kept.
 - Custom region names are a compatibility surface (users' code is keyed by them): don't rename or remove them.
 - The built-in runtime template has no header line; the generator prepends `templates.header` + the notice to every
   generated file. Changing the runtime changes its fingerprint, so ejected copies get a TEMPLATE_OUTDATED warning.
-- User-facing failures are `ApiSteadyError` (code + message + details + hint). Anything else is a bug and the CLI says so.
+- User-facing failures are `SteadySdkError` (code + message + details + hint). Anything else is a bug and the CLI says so.
 - New exported names in runtime.ts are reserved automatically (scanned); names generated in client.ts must be
   added to `RESERVED_TYPE_NAMES`.
 - Breaking = a client built for the old spec, or code written against the old SDK, can fail with the new one.
@@ -123,8 +123,9 @@ Output layout: `<out>/generated/**` (apisteady-owned, manifest-tracked), `<out>/
 - packages/cli/test/github-action.test.ts runs `tsc -b` first, because the script runs the built CLI.
 - Grouping `auto` (default) = tag when any operation has tags, else first path segment (see naming/assign.ts).
 - Webhook keys (`WebhookPayloads` property names) are a compatibility surface like region names.
-- Releasing: bump `version` in both packages (and the CLI's `@apisteady/core` dependency), add a CHANGELOG.md section,
+- Releasing: bump `version` in both packages (and the CLI's `@steadysdk/core` dependency), add a CHANGELOG.md section,
   commit, tag `vX.Y.Z` (the Action is pinned by tag), push with tags, then `npm publish -w packages/core` before
-  `npm publish -w packages/cli` (the CLI depends on core). `prepack` rebuilds dist/ from scratch.
+  `npm publish -w packages/cli` (the CLI depends on core). `prepack` rebuilds dist/ from scratch. Don't put `# comments`
+  after commands you hand to the user: zsh passes them through as arguments.
 - Tool quirk: typing ` `-style escapes through the Write tool turns them into raw characters; write them via
   a script (e.g. python with `chr(92)`) and grep for U+2028/2029 afterwards.

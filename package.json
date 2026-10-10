@@ -1,5 +1,5 @@
 {
-  "name": "apisteady-monorepo",
+  "name": "steadysdk-monorepo",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -16,7 +16,7 @@
     "test:real-world": "npm run build && node scripts/real-world.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "apisteady": "node packages/cli/dist/index.js",
+    "steadysdk": "node packages/cli/dist/index.js",
     "examples": "npm run build && node packages/cli/dist/index.js generate --cwd examples/petstore && node packages/cli/dist/index.js changelog --cwd examples/petstore openapi.yaml next/openapi.yaml --out next/CHANGELOG.md"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 /**
- * Swagger 2.0 → OpenAPI 3.0, at the document level, so the rest of apisteady (validation aside) only ever sees
+ * Swagger 2.0 → OpenAPI 3.0, at the document level, so the rest of steadysdk (validation aside) only ever sees
  * OpenAPI 3. Covers what affects generated clients: body and form parameters become request bodies,
  * `consumes`/`produces` become media types, `collectionFormat` becomes `style`/`explode`, `host`/`basePath`
  * become servers, and security definitions, `x-nullable`, string discriminators and `type: file` are mapped.

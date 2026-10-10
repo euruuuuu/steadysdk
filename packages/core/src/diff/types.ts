@@ -1,6 +1,6 @@
 /**
  * Result types of the diff engine. The JSON form of `ApiDiff` is a public, versioned format
- * (`apisteady diff --json`, `apisteady changelog --json`), so fields are only ever added.
+ * (`steadysdk diff --json`, `steadysdk changelog --json`), so fields are only ever added.
  */
 
 export const DIFF_FORMAT_VERSION = 1;

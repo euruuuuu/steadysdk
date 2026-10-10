@@ -4,20 +4,20 @@ import {
   applyIgnore,
   buildModel,
   checkVersionBump,
-  isApiSteadyError,
+  isSteadySdkError,
   diffModels,
   diffTitle,
   loadConfig,
   loadSpec,
   loadSpecSnapshot,
   parseRevisionArgument,
-  ApiSteadyError,
+  SteadySdkError,
   serializeDiff,
   type ApiDiff,
   type ApiModel,
   type LoadedSpec,
   type ResolvedConfig,
-} from '@apisteady/core';
+} from '@steadysdk/core';
 import { printChanges } from '../changes.js';
 import type { Ui } from '../ui.js';
 
@@ -40,7 +40,7 @@ export interface ComparedSpecs {
 
 /**
  * Resolves the two sides of a comparison. `old` defaults to the spec the SDK was last generated from
- * (`<output>/.apisteady/spec.json`), `new` to the configured input; a config is only needed for those defaults.
+ * (`<output>/.steadysdk/spec.json`), `new` to the configured input; a config is only needed for those defaults.
  */
 export async function compareSpecs(
   ui: Ui,
@@ -48,7 +48,7 @@ export async function compareSpecs(
   options: Pick<DiffCommandOptions, 'config' | 'input' | 'base' | 'validate'>,
 ): Promise<ComparedSpecs> {
   if (oldSpec !== undefined && options.base !== undefined) {
-    throw new ApiSteadyError('ARGUMENTS_INVALID', 'Pass either an [old] spec or --base, not both', {
+    throw new SteadySdkError('ARGUMENTS_INVALID', 'Pass either an [old] spec or --base, not both', {
       hint: '`--base main` compares the configured spec as it is on main; `main:openapi.yaml` names a file at a revision.',
     });
   }
@@ -97,7 +97,7 @@ async function atBase(ui: Ui, config: ResolvedConfig, revision: string): Promise
   try {
     return await loadSpec(config.inputPath, { validate: config.validate, revision });
   } catch (error) {
-    if (!isApiSteadyError(error) || error.code !== 'SPEC_NOT_FOUND') throw error;
+    if (!isSteadySdkError(error) || error.code !== 'SPEC_NOT_FOUND') throw error;
     ui.io.stderr(`${ui.c.dim(`${ui.rel(config.inputPath)} does not exist at ${revision}; every endpoint counts as new.`)}\n`);
     return 'missing';
   }
@@ -106,8 +106,8 @@ async function atBase(ui: Ui, config: ResolvedConfig, revision: string): Promise
 async function lastGenerated(ui: Ui, config: ResolvedConfig): Promise<LoadedSpec> {
   const snapshot = await loadSpecSnapshot(config.outputDir);
   if (snapshot) return snapshot;
-  throw new ApiSteadyError('BASELINE_NOT_FOUND', `No generated SDK found in ${ui.rel(config.outputDir)} to compare against`, {
-    hint: 'Run `apisteady generate` first, or compare two files: `apisteady diff old.yaml new.yaml`.',
+  throw new SteadySdkError('BASELINE_NOT_FOUND', `No generated SDK found in ${ui.rel(config.outputDir)} to compare against`, {
+    hint: 'Run `steadysdk generate` first, or compare two files: `steadysdk diff old.yaml new.yaml`.',
   });
 }
 

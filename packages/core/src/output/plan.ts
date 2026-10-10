@@ -16,7 +16,7 @@ export interface PlannedChange {
   /** POSIX path relative to the output directory. */
   path: string;
   action: FileAction;
-  /** `meta` = bookkeeping under `.apisteady/`. */
+  /** `meta` = bookkeeping under `.steadysdk/`. */
   ownership: FileOwnership | 'meta';
   content?: string | undefined;
 }
@@ -24,8 +24,8 @@ export interface PlannedChange {
 export interface Conflict {
   path: string;
   /**
-   * - `edited`: changed outside custom regions since apisteady wrote it.
-   * - `untracked`: at a generated path, but not written by apisteady.
+   * - `edited`: changed outside custom regions since steadysdk wrote it.
+   * - `untracked`: at a generated path, but not written by steadysdk.
    * - `region-removed`: custom regions with code that the new version of the file no longer has.
    * - `regions-invalid`: custom region markers are unbalanced, so the user's code cannot be carried over.
    */
@@ -39,7 +39,7 @@ export function describeConflict(conflict: Conflict): string {
     case 'edited':
       return `${conflict.path} (edited since the last generation)`;
     case 'untracked':
-      return `${conflict.path} (not created by apisteady)`;
+      return `${conflict.path} (not created by steadysdk)`;
     case 'region-removed':
       return `${conflict.path} (code in custom region ${conflict.detail} would be lost: the region is no longer generated)`;
     case 'regions-invalid':
@@ -51,7 +51,7 @@ export interface OutputPlan {
   outputDir: string;
   changes: PlannedChange[];
   /**
-   * Files apisteady would overwrite or delete that were not written by it: generated files edited by hand
+   * Files steadysdk would overwrite or delete that were not written by it: generated files edited by hand
    * since the last run, or files at generated paths that the manifest does not know about.
    */
   conflicts: Conflict[];

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to apisteady. Versions follow [semver](https://semver.org); before 1.0, minor versions
+All notable changes to steadysdk. Versions follow [semver](https://semver.org); before 1.0, minor versions
 may contain breaking changes.
 
 ## 0.1.0
@@ -19,22 +19,22 @@ First release.
 **Maintenance**
 
 - Safe regeneration: files you own are never touched, hand edits to generated files are detected, and code in
-  `// <apisteady:custom>` regions is carried over.
+  `// <steadysdk:custom>` regions is carried over.
 - A name lock keeps method and type names stable when the spec changes.
 - Configurable naming (cases, acronyms, path templates, overrides), ignore lists, a file header, and your own
-  HTTP runtime (`apisteady eject runtime`).
+  HTTP runtime (`steadysdk eject runtime`).
 
 **API changes**
 
-- `apisteady diff` and `apisteady changelog`: every change between two versions of a spec as text, Markdown or
+- `steadysdk diff` and `steadysdk changelog`: every change between two versions of a spec as text, Markdown or
   JSON, with breaking changes marked by whether the data is sent or received.
 - `--base <git-rev>` and `<rev>:<path>` compare against any git revision without a second checkout.
 - `--require-bump` fails on breaking changes without a new major `info.version`; `--fail-on-breaking` on any.
 
 **Workflow**
 
-- `apisteady init` finds your spec and writes a documented config.
-- `apisteady watch` regenerates on every save.
-- `apisteady generate --check`, and a GitHub Action that checks the SDK and gates breaking changes on pull requests.
+- `steadysdk init` finds your spec and writes a documented config.
+- `steadysdk watch` regenerates on every save.
+- `steadysdk generate --check`, and a GitHub Action that checks the SDK and gates breaking changes on pull requests.
 
 Tested against the GitHub, Stripe, OpenAI, Twilio and Kubernetes specs (`npm run test:real-world`).

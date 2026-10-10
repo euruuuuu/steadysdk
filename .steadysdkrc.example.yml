@@ -1,10 +1,10 @@
-# Every apisteady option, with its default. Copy what you need into .apisteadyrc.yml.
+# Every steadysdk option, with its default. Copy what you need into .steadysdkrc.yml.
 # Paths are relative to the config file. Unknown keys are rejected, so typos surface immediately.
 
 # OpenAPI 3.0 / 3.1 document: YAML or JSON, local path or http(s) URL. Required.
 input: ./openapi.yaml
 
-# Output directory. apisteady owns <output>/generated/ and <output>/.apisteady/;
+# Output directory. steadysdk owns <output>/generated/ and <output>/.steadysdk/;
 # index.ts and client.ts are created once and are yours from then on.
 output: ./sdk
 
@@ -32,7 +32,7 @@ typescript:
   # Extension in relative imports: .js (Node ESM + bundlers), .ts (Deno, Bun,
   # allowImportingTsExtensions), or none (bundler resolution).
   importExtension: .js
-  # Emit `// <apisteady:custom name>` ... `// </apisteady:custom>` regions in generated files (imports and class
+  # Emit `// <steadysdk:custom name>` ... `// </steadysdk:custom>` regions in generated files (imports and class
   # members of each API class, extra declarations in models.ts). Code you put inside them is kept when the
   # SDK is regenerated; edits anywhere else are still reported as conflicts.
   customRegions: true
@@ -49,8 +49,8 @@ ignore:
 
 templates:
   # Your copy of the HTTP runtime, used instead of the built-in generated/runtime.ts. Create it with
-  # `apisteady eject runtime`; apisteady checks it still exports what the generated code imports.
-  # runtime: ./apisteady/runtime.ts
+  # `steadysdk eject runtime`; steadysdk checks it still exports what the generated code imports.
+  # runtime: ./steadysdk/runtime.ts
   # Comment lines placed at the top of every generated file. Placeholders: {title}, {version}.
   # header: |
   #   // Copyright (c) Example Corp. Licensed under the MIT license.
@@ -117,9 +117,9 @@ naming:
     irregular: {}          # { person: people }
     uncountable: []        # [metadata, feedback]
 
-  # Pin every assigned name in <output>/.apisteady/names.lock.json so regeneration never renames existing
+  # Pin every assigned name in <output>/.steadysdk/names.lock.json so regeneration never renames existing
   # methods or types (e.g. when an operationId changes upstream or a new endpoint collides).
-  # `apisteady generate --relock` re-derives names; changing any naming option re-derives them too.
+  # `steadysdk generate --relock` re-derives names; changing any naming option re-derives them too.
   lock: true
 
   # Explicit names always win.

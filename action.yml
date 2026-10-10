@@ -1,4 +1,4 @@
-name: apisteady
+name: steadysdk
 description: Check that a generated TypeScript SDK matches its OpenAPI spec, and require a version bump for breaking API changes.
 branding:
   icon: package
@@ -6,13 +6,13 @@ branding:
 
 inputs:
   working-directory:
-    description: Directory to run in. The apisteady config is searched from there upwards.
+    description: Directory to run in. The steadysdk config is searched from there upwards.
     default: .
   config:
-    description: Config file to use instead of the nearest .apisteadyrc.yml.
+    description: Config file to use instead of the nearest .steadysdkrc.yml.
     default: ''
   check:
-    description: Fail when the committed SDK is not exactly what the spec and config produce (`apisteady generate --check`).
+    description: Fail when the committed SDK is not exactly what the spec and config produce (`steadysdk generate --check`).
     default: 'true'
   base:
     description: Git revision to compare the spec against. Defaults to the pull request's base branch, or to the commit before a push.
@@ -51,16 +51,16 @@ runs:
       uses: actions/setup-node@v7
       with:
         node-version: 24
-    # Until apisteady is on npm, the action builds the CLI from its own checkout.
-    - name: Build apisteady
+    # Until steadysdk is on npm, the action builds the CLI from its own checkout.
+    - name: Build steadysdk
       shell: bash
       working-directory: ${{ github.action_path }}
       run: npm ci --no-audit --no-fund && npm run build
     - id: run
-      name: Run apisteady
+      name: Run steadysdk
       shell: bash
       env:
-        APISTEADY_CLI: ${{ github.action_path }}/packages/cli/dist/index.js
+        STEADYSDK_CLI: ${{ github.action_path }}/packages/cli/dist/index.js
         INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         INPUT_CONFIG: ${{ inputs.config }}
         INPUT_CHECK: ${{ inputs.check }}
