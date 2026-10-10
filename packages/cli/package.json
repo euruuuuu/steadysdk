@@ -24,7 +24,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "apisteady": "./dist/index.js"
+    "apisteady": "dist/index.js"
   },
   "exports": {
     "./package.json": "./package.json"
