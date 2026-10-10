@@ -32,6 +32,12 @@ function isStructured(media: MediaType): boolean {
   return kind === 'json' || kind === 'form' || kind === 'multipart';
 }
 
+/** TS type of a body: its preferred media type's schema, `string` for text, `Blob` for binary; undefined without one. */
+export function bodyType(content: readonly MediaType[], ctx: TypeContext): string | undefined {
+  const media = preferredMedia(content);
+  return media && mediaType(media, ctx);
+}
+
 function mediaType(media: MediaType, ctx: TypeContext): string {
   if (isStructured(media)) return renderType(media.schema, ctx);
   if (mediaKind(media.contentType) === 'text') return 'string';

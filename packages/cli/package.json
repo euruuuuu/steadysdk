@@ -2,6 +2,25 @@
   "name": "steadysdk",
   "version": "0.1.0",
   "description": "Generate and maintain typed API client SDKs from OpenAPI specs",
+  "keywords": [
+    "openapi",
+    "swagger",
+    "sdk",
+    "sdk-generator",
+    "codegen",
+    "typescript",
+    "api-client",
+    "cli",
+    "changelog",
+    "breaking-changes"
+  ],
+  "homepage": "https://github.com/euruuuuu/steadysdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/euruuuuu/steadysdk.git",
+    "directory": "packages/cli"
+  },
+  "bugs": "https://github.com/euruuuuu/steadysdk/issues",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -11,18 +30,23 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map"
   ],
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepack": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -b --force"
   },
   "dependencies": {
     "@steadysdk/core": "^0.1.0",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1",
     "yaml": "^2.9.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

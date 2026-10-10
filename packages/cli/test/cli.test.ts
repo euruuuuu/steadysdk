@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -52,6 +52,19 @@ describe('steadysdk CLI', () => {
       const result = await steadysdk(dir, 'init');
       expect(result).toMatchObject({ code: 0, stdout: expect.stringContaining('Detected spec ./openapi.json') });
       expect(await readFile(path.join(dir, '.steadysdkrc.yml'), 'utf8')).toContain('input: ./openapi.json');
+    });
+
+    it('looks in the usual spec folders and says what it found', async () => {
+      const dir = await tempDir();
+      await mkdir(path.join(dir, 'api'));
+      await copyFile(PETSTORE_SPEC, path.join(dir, 'api/openapi.yaml'));
+      await writeFile(path.join(dir, 'api/swagger.json'), '{}');
+      const result = await steadysdk(dir, 'init');
+      expect(result.stdout).toContain('Detected spec ./api/openapi.yaml (Swagger Petstore 1.0.0, OpenAPI 3.0.3, 11 operations)');
+      expect(result.stdout).toContain('Also found: ./api/swagger.json.');
+      // `npx steadysdk ...` when the tests themselves run through npx.
+      expect(result.stdout).toMatch(/Keep it in sync in CI: +(npx )?steadysdk generate --check/);
+      expect(await readFile(path.join(dir, '.steadysdkrc.yml'), 'utf8')).toContain('input: ./api/openapi.yaml');
     });
 
     it('warns when no spec is found, and honours --input/--output', async () => {

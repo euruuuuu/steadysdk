@@ -92,12 +92,21 @@ describe('generated code', () => {
     await typecheck(path.join(dir, 'sdk'));
   });
 
+  it('type-checks for a Swagger 2.0 spec', async () => {
+    const dir = await project(path.join(FIXTURES, 'swagger-2.0.yaml'));
+    await gen(dir);
+    expect(await read(dir, 'generated/api/pets.ts')).toContain("contentType: 'multipart/form-data'");
+    await typecheck(path.join(dir, 'sdk'));
+  });
+
   it('type-checks for a 3.1 spec with groupBy none and other naming styles', async () => {
     const dir = await project(
       path.join(FIXTURES, 'openapi-31.yaml'),
       'client:\n  groupBy: none\ntypescript:\n  importExtension: .ts\nnaming:\n  parameters:\n    case: preserve\n',
     );
     await gen(dir);
+    expect(await read(dir, 'generated/webhooks.ts')).toContain('  newThing: Thing;');
+    expect(await read(dir, 'generated/index.ts')).toContain("export * from './webhooks.ts';");
     await typecheck(path.join(dir, 'sdk'), { allowImportingTsExtensions: true });
   });
 });

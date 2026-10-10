@@ -9,7 +9,7 @@ import type { NameLock } from '../../naming/lock.js';
 import { emptyRegion } from '../../output/regions.js';
 import type { GeneratedFile } from '../types.js';
 import { CodeWriter, literal, propertyKey, stringLiteral } from './code.js';
-import { derivedTypesFor, writeOperationMethod, writeOperationTypes } from './operations.js';
+import { bodyType, derivedTypesFor, writeOperationMethod, writeOperationTypes } from './operations.js';
 import { builtinRuntime } from './templates.js';
 import { renderType, schemaDocs, writeMembers, type TypeContext } from './types.js';
 
@@ -19,8 +19,8 @@ const RUNTIME_MODULE = 'generated/runtime.ts';
 
 /** Names the generated code itself defines or relies on; schemas that clash get `types.reservedSuffix`. */
 const RESERVED_TYPE_NAMES = [
-  // Exported by generated/client.ts
-  'GeneratedClient', 'ClientOptions', 'AuthCredentials', 'DEFAULT_BASE_URL', 'SECURITY_SCHEMES',
+  // Exported by generated/client.ts and generated/webhooks.ts
+  'GeneratedClient', 'ClientOptions', 'AuthCredentials', 'DEFAULT_BASE_URL', 'SECURITY_SCHEMES', 'WebhookPayloads', 'WebhookName',
   // Globals referenced by generated types
   'Array', 'ArrayBuffer', 'BigInt', 'Blob', 'Boolean', 'Date', 'Error', 'File', 'FormData', 'Function', 'Headers',
   'JSON', 'Map', 'Math', 'Number', 'Object', 'Omit', 'Partial', 'Pick', 'Promise', 'Readonly', 'Record', 'RegExp',
@@ -115,6 +115,13 @@ export async function generateTypeScript(input: TypeScriptGeneratorInput): Promi
     files.push({ path: file, content, ownership: 'generated' });
   }
 
+  const webhooksFile = model.webhooks.length > 0 ? 'generated/webhooks.ts' : undefined;
+  if (webhooksFile) {
+    const imports = new ImportTracker(webhooksFile, importPath);
+    const body = webhooksBody(model, imports.typeContext(names));
+    files.push({ path: webhooksFile, content: assemble(header(NOTICE), imports, body, []), ownership: 'generated' });
+  }
+
   const clientImports = new ImportTracker('generated/client.ts', importPath);
   trackers.push(clientImports);
   files.push({
@@ -124,7 +131,7 @@ export async function generateTypeScript(input: TypeScriptGeneratorInput): Promi
   });
 
   const barrel = new CodeWriter().line(header(NOTICE)).blank();
-  for (const file of [RUNTIME_MODULE, 'generated/models.ts', 'generated/client.ts', ...groupFiles.values()]) {
+  for (const file of [RUNTIME_MODULE, 'generated/models.ts', 'generated/client.ts', ...groupFiles.values(), ...(webhooksFile ? [webhooksFile] : [])]) {
     barrel.line(`export * from ${stringLiteral(importPath('generated/index.ts', file))};`);
   }
   files.push({ path: 'generated/index.ts', content: barrel.toString(), ownership: 'generated' });
@@ -186,6 +193,28 @@ function checkRuntimeContract(source: string, trackers: readonly ImportTracker[]
     details: missing.map((name) => `export ${name}`),
     hint: 'Compare it with the built-in runtime: `steadysdk eject runtime --stdout`.',
   });
+}
+
+/** `WebhookPayloads`: webhook name → the body its handler receives. */
+function webhooksBody(model: ApiModel, ctx: TypeContext): CodeWriter {
+  const body = new CodeWriter();
+  const example = model.webhooks[0]!.key;
+  body.blank();
+  body.doc([
+    'Payloads of the webhooks this API sends, by webhook name.',
+    `\`WebhookPayloads[${stringLiteral(example)}]\` is the body a \`${example}\` handler receives.`,
+  ]);
+  body.block('export interface WebhookPayloads {', () => {
+    for (const hook of model.webhooks) {
+      const docs = [hook.summary, hook.description !== hook.summary ? hook.description : undefined].filter((line) => line !== undefined);
+      body.doc([...docs, ...(hook.deprecated ? ['@deprecated'] : [])]);
+      body.line(`${propertyKey(hook.key)}: ${bodyType(hook.payload?.content ?? [], ctx) ?? 'undefined'};`);
+    }
+  });
+  body.blank();
+  body.doc(['Names of the webhooks this API sends.']);
+  body.line('export type WebhookName = keyof WebhookPayloads;');
+  return body;
 }
 
 function modelsFile(model: ApiModel, names: SdkNames, header: string, regions: boolean): string {
@@ -382,11 +411,12 @@ class ImportTracker {
       .map(([module, names]) => {
         const sorted = [...names].sort(([a], [b]) => a.localeCompare(b));
         const source = stringLiteral(this.importPath(this.file, module));
-        if (sorted.every(([, kind]) => kind === 'type')) {
-          return `import type { ${sorted.map(([name]) => name).join(', ')} } from ${source};`;
-        }
-        const specifiers = sorted.map(([name, kind]) => (kind === 'type' ? `type ${name}` : name));
-        return `import { ${specifiers.join(', ')} } from ${source};`;
+        const typeOnly = sorted.every(([, kind]) => kind === 'type');
+        const specifiers = sorted.map(([name, kind]) => (typeOnly || kind === 'value' ? name : `type ${name}`));
+        const keyword = typeOnly ? 'import type' : 'import';
+        const line = `${keyword} { ${specifiers.join(', ')} } from ${source};`;
+        // Large specs import hundreds of models into one file: one per line, as a formatter would.
+        return line.length <= 120 ? line : `${keyword} {\n${specifiers.map((name) => `  ${name},`).join('\n')}\n} from ${source};`;
       });
   }
 

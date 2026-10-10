@@ -14,7 +14,7 @@ describe('config', () => {
       output: './sdk',
       target: 'typescript',
       validate: true,
-      client: { groupBy: 'tag' },
+      client: { groupBy: 'auto' },
       naming: { operations: { case: 'camel', source: 'operationId' }, types: { case: 'pascal' }, lock: true },
     });
   });

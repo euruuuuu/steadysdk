@@ -79,7 +79,7 @@ export async function compareSpecs(
   const ignore = pending && (await pending).ignore;
   const model = (spec: LoadedSpec) => (ignore ? applyIgnore(buildModel(spec.document), ignore) : buildModel(spec.document));
   const head = model(to);
-  const base: ApiModel = from === 'missing' ? { ...head, version: 'none', operations: [], schemas: [], securitySchemes: [], servers: [] } : model(from);
+  const base: ApiModel = from === 'missing' ? { ...head, version: 'none', operations: [], webhooks: [], schemas: [], securitySchemes: [], servers: [] } : model(from);
   return { diff: diffModels(base, head), from: from === 'missing' ? `${options.base} (no spec yet)` : from.source, to: to.source };
 }
 

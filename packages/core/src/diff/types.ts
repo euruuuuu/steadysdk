@@ -50,7 +50,10 @@ export type ChangeKind =
   | 'part-removed'
   | 'discriminator-changed'
   | 'default-changed'
-  // Anything above that can be deprecated (operation, parameter, schema, property)
+  // Webhooks (OpenAPI 3.1): requests the API sends; payload changes use the schema kinds above
+  | 'webhook-added'
+  | 'webhook-removed'
+  // Anything above that can be deprecated (operation, parameter, schema, property, webhook)
   | 'deprecated'
   | 'undeprecated'
   // API-wide
@@ -63,7 +66,7 @@ export type ChangeKind =
  * What a change is about: an operation, a component schema, a security scheme, or the API as a whole
  * (default server, a security requirement every operation shares).
  */
-export type ChangeScope = 'operation' | 'schema' | 'security' | 'api';
+export type ChangeScope = 'operation' | 'webhook' | 'schema' | 'security' | 'api';
 
 export interface Change {
   kind: ChangeKind;
@@ -82,6 +85,8 @@ export interface Change {
   schema?: string | undefined;
   /** Security scheme key for `security` changes. */
   securityScheme?: string | undefined;
+  /** Webhook key (its name) for `webhook` changes. */
+  webhook?: string | undefined;
   /** Where inside the operation: `parameters/query/limit`, `requestBody/application/json`, `responses/200/...`, `security`. */
   location?: string | undefined;
   /** Where inside the schema: `owner.name`, `tags[]` (array items), `metadata{}` (map values). */
@@ -99,6 +104,6 @@ export interface ApiDiff {
   from: { title: string; version: string };
   to: { title: string; version: string };
   summary: { breaking: number; nonBreaking: number };
-  /** In spec order: operations, then component schemas, then security schemes and servers. */
+  /** In spec order: operations, webhooks, component schemas, then security schemes and servers. */
   changes: Change[];
 }

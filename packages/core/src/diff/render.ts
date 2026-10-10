@@ -46,11 +46,13 @@ export function diffTitle(diff: ApiDiff): string {
   return from.version === to.version ? `${to.title} ${to.version}` : `${to.title} ${from.version} → ${to.version}`;
 }
 
-/** Plain-text subject of a change: `GET /pets`, `schema Pet`, `security scheme apiKey`, `API`. */
+/** Plain-text subject of a change: `GET /pets`, `webhook newPet`, `schema Pet`, `security scheme apiKey`, `API`. */
 export function changeSubject(change: Change): string {
   switch (change.scope) {
     case 'operation':
       return change.operation ?? '';
+    case 'webhook':
+      return `webhook ${change.webhook ?? ''}`;
     case 'schema':
       return `schema ${change.schema ?? ''}`;
     case 'security':
@@ -74,6 +76,8 @@ function markdownSubject(change: Change): string {
   switch (change.scope) {
     case 'operation':
       return `**\`${change.operation}\`**${change.operationId ? ` (\`${change.operationId}\`)` : ''}`;
+    case 'webhook':
+      return `**Webhook \`${change.webhook}\`**`;
     case 'schema':
       return `**Schema \`${change.schema}\`**`;
     case 'security':

@@ -1,4 +1,4 @@
-import type { ApiModel, EnumValue, ObjectSchema, Operation, Property, SchemaMeta, SchemaNode } from '../ir/model.js';
+import type { ApiModel, EnumValue, ObjectSchema, Property, SchemaMeta, SchemaNode } from '../ir/model.js';
 import { reachability, refsOf } from '../ir/refs.js';
 import { capitalize, code } from './text.js';
 import type { ChangeKind } from './types.js';
@@ -388,7 +388,7 @@ function values(list: readonly EnumValue[]): string {
 export interface SchemaUsage {
   /** Operations sending the schema (parameters, request bodies), in model order. */
   request: string[];
-  /** Operations receiving it (responses), in model order. */
+  /** Operations receiving it (responses), then webhooks sending it (`webhook <key>`), in model order. */
   response: string[];
 }
 
@@ -396,19 +396,21 @@ export interface SchemaUsage {
 export function schemaUsage(model: ApiModel): Map<string, SchemaUsage> {
   const reachable = reachability(model);
   const usage = new Map<string, SchemaUsage>();
-  const record = (node: SchemaNode, op: Operation, side: keyof SchemaUsage): void => {
+  const record = (node: SchemaNode, user: string, side: keyof SchemaUsage): void => {
     for (const ref of refsOf(node)) {
       for (const key of reachable(ref)) {
         let entry = usage.get(key);
         if (!entry) usage.set(key, (entry = { request: [], response: [] }));
-        if (entry[side].at(-1) !== op.key) entry[side].push(op.key);
+        if (entry[side].at(-1) !== user) entry[side].push(user);
       }
     }
   };
   for (const op of model.operations) {
-    for (const param of op.parameters) record(param.schema, op, 'request');
-    for (const media of op.requestBody?.content ?? []) record(media.schema, op, 'request');
-    for (const response of op.responses) for (const media of response.content) record(media.schema, op, 'response');
+    for (const param of op.parameters) record(param.schema, op.key, 'request');
+    for (const media of op.requestBody?.content ?? []) record(media.schema, op.key, 'request');
+    for (const response of op.responses) for (const media of response.content) record(media.schema, op.key, 'response');
   }
+  // A webhook payload is received by the client, like a response.
+  for (const hook of model.webhooks) for (const media of hook.payload?.content ?? []) record(media.schema, `webhook ${hook.key}`, 'response');
   return usage;
 }

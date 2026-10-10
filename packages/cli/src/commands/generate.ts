@@ -79,7 +79,7 @@ export function printGeneration(
 function printSummary(ui: Ui, result: GenerateResult, verbose: boolean): void {
   const { model, spec } = result;
   ui.success(
-    `Loaded ${ui.c.bold(`${model.title} ${model.version}`)} (OpenAPI ${spec.openapiVersion}): ` +
+    `Loaded ${ui.c.bold(`${model.title} ${model.version}`)} (${spec.convertedFrom ? `Swagger ${spec.convertedFrom}, read as OpenAPI 3.0` : `OpenAPI ${spec.openapiVersion}`}): ` +
       `${count(model.operations.length, 'operation')}, ${count(model.schemas.length, 'schema')}`,
   );
   ui.diagnostics(result.diagnostics, verbose);

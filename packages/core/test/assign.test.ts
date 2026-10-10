@@ -14,6 +14,7 @@ function model(operations: Operation[], schemas: string[] = []): ApiModel {
     tags: [],
     securitySchemes: [],
     operations,
+    webhooks: [],
     schemas: schemas.map((key) => ({ key, schema: { kind: 'unknown' } })),
   };
 }
@@ -22,7 +23,8 @@ function assign(api: ApiModel, options: { lock?: NameLock; config?: Record<strin
   const diagnostics = new Diagnostics();
   const result = assignNames({
     model: api,
-    config: configSchema.parse({ input: 'x', ...options.config }),
+    // Most cases are about the root scope, which untagged operations share when grouping by tag.
+    config: configSchema.parse({ input: 'x', client: { groupBy: 'tag' }, ...options.config }),
     lock: options.lock,
     reservedTypeNames: ['Error', 'Record'],
     reservedMemberNames: ['http'],
@@ -35,6 +37,14 @@ function assign(api: ApiModel, options: { lock?: NameLock; config?: Record<strin
 const methodOf = (result: ReturnType<typeof assign>, key: string): string | undefined => result.names.operations.get(key)?.method;
 
 describe('assignNames', () => {
+  it('groups by tag when the spec uses tags, and by path otherwise (groupBy: auto)', () => {
+    const auto = { client: { groupBy: 'auto' } };
+    const untagged = assign(model([op('GET /accounts'), op('GET /charges/{id}')]), { config: auto });
+    expect([...untagged.names.groups.keys()]).toEqual(['accounts', 'charges']);
+    const tagged = assign(model([op('GET /accounts', { tags: ['billing'] }), op('GET /charges/{id}')]), { config: auto });
+    expect([...tagged.names.groups.keys()]).toEqual(['billing']);
+  });
+
   it('suffixes colliding method names and warns', () => {
     const result = assign(model([op('get /pets', { operationId: 'list' }), op('get /dogs', { operationId: 'list' })]));
     expect(methodOf(result, 'GET /pets')).toBe('list');

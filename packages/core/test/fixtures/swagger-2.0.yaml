@@ -1,0 +1,116 @@
+swagger: '2.0'
+info: { title: Legacy Pets, version: 1.2.0 }
+host: api.example.com
+basePath: /v1
+schemes: [http, https]
+consumes: [application/json]
+produces: [application/json]
+securityDefinitions:
+  basic: { type: basic }
+  key: { type: apiKey, in: header, name: X-Key }
+  oauth:
+    type: oauth2
+    flow: accessCode
+    authorizationUrl: https://example.com/authorize
+    tokenUrl: https://example.com/token
+    scopes: { 'pets:read': Read pets }
+security:
+  - key: []
+parameters:
+  limit:
+    name: limit
+    in: query
+    type: integer
+    format: int32
+    maximum: 100
+  petBody:
+    name: pet
+    in: body
+    required: true
+    schema: { $ref: '#/definitions/Pet' }
+  username:
+    name: username
+    in: formData
+    required: true
+    type: string
+responses:
+  Error:
+    description: Something went wrong.
+    schema: { $ref: '#/definitions/Error' }
+paths:
+  /pets:
+    get:
+      tags: [pets]
+      operationId: listPets
+      parameters:
+        - $ref: '#/parameters/limit'
+        - { name: tags, in: query, type: array, items: { type: string } }
+        - { name: status, in: query, type: array, items: { type: string, enum: [available, sold] }, collectionFormat: multi }
+      responses:
+        '200':
+          description: Pets.
+          headers:
+            X-Rate-Limit: { type: integer, description: Calls left. }
+          schema: { type: array, items: { $ref: '#/definitions/Pet' } }
+        default: { $ref: '#/responses/Error' }
+    post:
+      tags: [pets]
+      operationId: createPet
+      parameters:
+        - $ref: '#/parameters/petBody'
+      responses:
+        '201': { description: Created., schema: { $ref: '#/definitions/Pet' } }
+  /pets/{id}:
+    parameters:
+      - { name: id, in: path, required: true, type: integer, format: int64 }
+    put:
+      tags: [pets]
+      operationId: replacePet
+      consumes: [application/json, application/xml]
+      parameters:
+        - { name: pet, in: body, schema: { $ref: '#/definitions/Pet' } }
+      responses:
+        '200': { description: Replaced., schema: { $ref: '#/definitions/Pet' } }
+  /pets/{id}/photo:
+    post:
+      tags: [pets]
+      operationId: uploadPhoto
+      consumes: [multipart/form-data]
+      parameters:
+        - { name: id, in: path, required: true, type: integer }
+        - { name: file, in: formData, required: true, type: file }
+        - { name: caption, in: formData, type: string, description: Shown under the photo. }
+      responses:
+        '204': { description: Uploaded. }
+  /login:
+    post:
+      tags: [auth]
+      operationId: logIn
+      security: []
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - $ref: '#/parameters/username'
+        - { name: password, in: formData, required: true, type: string, format: password }
+      responses:
+        '200': { description: A session token., schema: { type: string } }
+definitions:
+  Pet:
+    type: object
+    required: [name, kind]
+    discriminator: kind
+    properties:
+      id: { type: integer, format: int64, readOnly: true }
+      name: { type: string }
+      kind: { type: string }
+      tag: { type: string, x-nullable: true }
+  Cat:
+    allOf:
+      - $ref: '#/definitions/Pet'
+      - type: object
+        properties:
+          indoor: { type: boolean }
+  Error:
+    type: object
+    required: [message]
+    properties:
+      message: { type: string }

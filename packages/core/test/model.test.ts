@@ -27,7 +27,7 @@ describe('loadSpec', () => {
   it.each([
     ['missing.yaml', 'SPEC_NOT_FOUND'],
     ['broken.yaml', 'SPEC_PARSE_FAILED'],
-    ['swagger2.yaml', 'SPEC_UNSUPPORTED'],
+    ['openapi-4.yaml', 'SPEC_UNSUPPORTED'],
     ['invalid.yaml', 'SPEC_INVALID'],
   ])('reports %s as %s', async (file, code) => {
     const error = await loadSpec(path.join(FIXTURES, file)).catch((caught: unknown) => caught);
@@ -134,8 +134,19 @@ describe('buildModel (3.1 features)', async () => {
     expect(params[1]).toMatchObject({ name: 'verbose', description: 'Operation-level parameter wins.', schema: { type: 'integer' } });
   });
 
-  it('notes that webhooks are skipped', () => {
-    expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'WEBHOOKS_IGNORED' }));
+  it('reads webhooks and their payloads', () => {
+    expect(model.webhooks).toEqual([
+      {
+        key: 'newThing',
+        name: 'newThing',
+        method: 'post',
+        summary: undefined,
+        description: undefined,
+        deprecated: false,
+        payload: { required: false, description: undefined, content: [{ contentType: 'application/json', schema: { kind: 'ref', target: 'Thing' } }] },
+      },
+    ]);
+    expect(diagnostics.map((item) => item.code)).not.toContain('WEBHOOKS_IGNORED');
   });
 });
 
@@ -163,6 +174,34 @@ describe('buildModel edge cases', () => {
   it('drops an empty `type: object` next to oneOf', () => {
     const model = buildModel(doc({ A: { type: 'object', oneOf: [{ type: 'string' }, { type: 'number' }] } }));
     expect(model.schemas[0]?.schema.kind).toBe('union');
+  });
+
+  it('reads 3.1-style null variants and type arrays as nullable, like 3.0', () => {
+    const schema = (raw: unknown) => buildModel(doc({ B: { type: 'object' }, A: raw })).schemas[1]?.schema;
+    const ref = { $ref: '#/components/schemas/B' };
+    expect(schema({ anyOf: [ref, { type: 'null' }] })).toEqual({ kind: 'ref', target: 'B', nullable: true });
+    expect(schema({ allOf: [ref], type: ['null'] })).toEqual({ kind: 'ref', target: 'B', nullable: true });
+    expect(schema({ oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'null' }] })).toEqual({
+      kind: 'union',
+      exclusive: true,
+      variants: [{ kind: 'scalar', type: 'string' }, { kind: 'scalar', type: 'number' }],
+      discriminator: undefined,
+      nullable: true,
+    });
+    // A `type` list that only repeats the variants' types adds nothing.
+    expect(schema({ anyOf: [{ type: 'string' }, { type: 'integer' }], type: ['null', 'string', 'number'] })).toMatchObject({
+      kind: 'union',
+      nullable: true,
+      variants: [{ type: 'string' }, { type: 'integer' }],
+    });
+    expect(schema({ type: 'null' })).toEqual({ kind: 'scalar', type: 'null', nullable: true });
+  });
+
+  it('builds the same model for a schema written the 3.0 way and the 3.1 way', () => {
+    const v30 = { type: 'object', properties: { owner: { allOf: [{ $ref: '#/components/schemas/B' }], nullable: true }, tags: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }], nullable: true } } };
+    const v31 = { type: 'object', properties: { owner: { anyOf: [{ $ref: '#/components/schemas/B' }, { type: 'null' }] }, tags: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }], type: ['null', 'string', 'array'] } } };
+    const build = (raw: unknown) => buildModel(doc({ B: { type: 'object' }, A: raw }));
+    expect(build(v31)).toEqual(build(v30));
   });
 
   it('infers enum types when `type` is missing', () => {

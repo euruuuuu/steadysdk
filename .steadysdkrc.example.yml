@@ -19,10 +19,11 @@ client:
   # name: PetstoreClient
 
   # How operations are grouped:
+  #   auto -> tag when the spec tags its operations, path otherwise
   #   tag  -> client.pets.listPets()   (first tag; untagged operations stay on the root client)
   #   path -> client.pets.listPets()   (first path segment, ignoring naming.operations.ignoreSegments)
   #   none -> client.listPets()
-  groupBy: tag
+  groupBy: auto
 
   # Overrides servers[0].url as the default base URL. Callers can still pass `baseUrl` at runtime.
   # baseUrl: https://api.example.com

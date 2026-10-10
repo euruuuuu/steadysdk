@@ -1,6 +1,6 @@
 import { readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { parseConfig, SteadySdkError } from '@steadysdk/core';
+import { buildModel, loadSpec, parseConfig, SteadySdkError } from '@steadysdk/core';
 import { parse as parseYaml } from 'yaml';
 import type { Ui } from '../ui.js';
 
@@ -13,6 +13,9 @@ export interface InitCommandOptions {
 export const CONFIG_FILE = '.steadysdkrc.yml';
 
 const SPEC_CANDIDATES = /^(openapi|swagger|api|spec)([.-][\w.-]+)?\.(ya?ml|json)$/i;
+/** Where specs usually live, besides the project root. */
+const SPEC_DIRECTORIES = ['api', 'apis', 'spec', 'specs', 'openapi', 'docs', 'schema'];
+const EXAMPLE_CONFIG = 'https://github.com/euruuuuu/steadysdk/blob/main/.steadysdkrc.example.yml';
 
 export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<number> {
   const target = path.join(ui.io.cwd, CONFIG_FILE);
@@ -20,7 +23,8 @@ export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<
     throw new SteadySdkError('CONFIG_EXISTS', `${CONFIG_FILE} already exists`, { hint: 'Pass --force to overwrite it.' });
   }
 
-  const input = options.input ?? (await detectSpec(ui.io.cwd));
+  const candidates = options.input === undefined ? await detectSpecs(ui.io.cwd) : [];
+  const input = options.input ?? candidates[0];
   const output = options.output ?? './sdk';
   const content = configTemplate(input ?? './openapi.yaml', output);
   parseConfig(parseYaml(content), 'init template'); // never write a config steadysdk itself would reject
@@ -29,24 +33,54 @@ export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<
   ui.success(`Created ${ui.c.bold(CONFIG_FILE)}`);
   if (input === undefined) {
     ui.warn('No OpenAPI file found here; set `input` in the config to your spec.');
-  } else if (options.input === undefined) {
-    ui.info(`Detected spec ${ui.c.bold(input)}`);
+  } else {
+    const what = await describeSpec(ui, input);
+    if (options.input === undefined) ui.info(`Detected spec ${ui.c.bold(input)}${what ? ` ${ui.c.dim(`(${what})`)}` : ''}`);
+    else if (what) ui.info(`Spec ${ui.c.bold(input)} ${ui.c.dim(`(${what})`)}`);
+    if (candidates.length > 1) ui.line(ui.c.dim(`  Also found: ${candidates.slice(1).join(', ')}. Change \`input\` to use one of those.`));
   }
+
+  // When run through npx, suggest commands that work the same way.
+  const cli = process.env['npm_command'] === 'exec' ? 'npx steadysdk' : 'steadysdk';
   ui.line();
   ui.line('Next steps:');
-  ui.line(`  1. Review naming rules in ${CONFIG_FILE}`);
-  ui.line(`  2. Run ${ui.c.cyan('steadysdk generate')}`);
+  ui.line(`  1. Review ${CONFIG_FILE}: naming rules, grouping, parts of the API to leave out`);
+  ui.line(`     ${ui.c.dim(`Every option: ${EXAMPLE_CONFIG}`)}`);
+  ui.line(`  2. Generate the SDK:         ${ui.c.cyan(`${cli} generate`)}`);
+  ui.line(`  3. Commit ${output.replace(/^\.\//, '')}/, including its .steadysdk/ folder (it keeps names stable)`);
+  ui.line(`  4. Keep it in sync in CI:    ${ui.c.cyan(`${cli} generate --check`)}`);
+  ui.line();
+  ui.line(ui.c.dim(`While you edit the spec, ${cli} watch regenerates on every save.`));
   return 0;
 }
 
-async function detectSpec(cwd: string): Promise<string | undefined> {
-  const entries = await readdir(cwd).catch(() => [] as string[]);
-  const match = entries.filter((entry) => SPEC_CANDIDATES.test(entry)).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))[0];
-  return match === undefined ? undefined : `./${match}`;
+/** Spec files in the project root, then in the usual spec directories; `openapi.*` first. */
+async function detectSpecs(cwd: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const directory of ['', ...SPEC_DIRECTORIES]) {
+    const entries = await readdir(path.join(cwd, directory)).catch(() => [] as string[]);
+    const matches = entries.filter((entry) => SPEC_CANDIDATES.test(entry)).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    found.push(...matches.map((entry) => `./${directory === '' ? entry : `${directory}/${entry}`}`));
+  }
+  return found;
 }
 
 function rank(file: string): number {
   return file.toLowerCase().startsWith('openapi') ? 0 : 1;
+}
+
+/** `Petstore 1.0.0, OpenAPI 3.0.3, 11 operations`, or a warning when the file cannot be read. */
+async function describeSpec(ui: Ui, input: string): Promise<string | undefined> {
+  try {
+    const spec = await loadSpec(input, { cwd: ui.io.cwd, validate: false });
+    const model = buildModel(spec.document);
+    const format = spec.convertedFrom ? `Swagger ${spec.convertedFrom}` : `OpenAPI ${spec.openapiVersion}`;
+    const count = model.operations.length;
+    return `${model.title} ${model.version}, ${format}, ${count} operation${count === 1 ? '' : 's'}`;
+  } catch (error) {
+    ui.warn(`Could not read ${input} as an OpenAPI spec yet: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
 }
 
 function configTemplate(input: string, output: string): string {
@@ -61,7 +95,7 @@ output: ${yamlString(output)}
 
 client:
   # name: MyApiClient     # root client class; defaults to the spec title + "Client"
-  groupBy: tag            # tag | path | none  ->  client.pets.listPets() vs client.listPets()
+  groupBy: auto           # auto | tag | path | none  (auto: by tag if the spec uses tags, else by path)
   # baseUrl: https://api.example.com
 
 naming:

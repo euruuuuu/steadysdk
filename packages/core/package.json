@@ -2,6 +2,22 @@
   "name": "@steadysdk/core",
   "version": "0.1.0",
   "description": "Generation, naming and drift-detection engine behind the steadysdk CLI",
+  "keywords": [
+    "openapi",
+    "swagger",
+    "sdk-generator",
+    "codegen",
+    "typescript",
+    "openapi-diff",
+    "breaking-changes"
+  ],
+  "homepage": "https://github.com/euruuuuu/steadysdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/euruuuuu/steadysdk.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/euruuuuu/steadysdk/issues",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -13,13 +29,15 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.map",
     "templates"
   ],
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepack": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -b --force"
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^13.1.0",
@@ -27,5 +45,8 @@
     "pluralize": "^8.0.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

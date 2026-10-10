@@ -7,14 +7,17 @@ import { SteadySdkError } from '../errors.js';
 import { canonicalJson, sha256 } from '../util/hash.js';
 import { openRevision, type GitRevision } from './git.js';
 import { semanticErrors } from './semantic.js';
+import { convertSwagger2, isSwagger2 } from './swagger2.js';
 
 export type OpenApiDocument = OpenAPIV3.Document | OpenAPIV3_1.Document;
 
 export interface LoadedSpec {
   /** The bundled document: external `$ref`s are pulled in, internal `$ref`s are kept. */
   document: OpenApiDocument;
-  /** The `openapi` field verbatim, e.g. `3.0.3`. */
+  /** The `openapi` field verbatim, e.g. `3.0.3` (`3.0.3` for converted Swagger 2.0 documents). */
   openapiVersion: string;
+  /** The `swagger` version when the document was Swagger and was converted to OpenAPI 3.0, e.g. `2.0`. */
+  convertedFrom?: string | undefined;
   dialect: '3.0' | '3.1';
   /** Absolute file path or URL the spec was read from; `<revision>:<path>` when read from git. */
   source: string;
@@ -63,6 +66,13 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
   try {
     document = (await parser.bundle(resolved, git ? { resolve: gitResolver(git) } : {})) as OpenApiDocument;
   } catch (error) {
+    const unsupported = /^Unsupported (?:OpenAPI|Swagger) version: (\S+?)\.?(?:\s|$)/.exec(errorMessage(error));
+    if (unsupported) {
+      throw new SteadySdkError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${unsupported[1]}" in ${label}`, {
+        hint: 'steadysdk supports Swagger 2.0 and OpenAPI 3.0.x / 3.1.x.',
+        cause: error,
+      });
+    }
     throw new SteadySdkError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${label}`, {
       details: [errorMessage(error)],
       hint: 'The file must be valid YAML or JSON, and every external $ref must resolve.',
@@ -70,38 +80,46 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
     });
   }
 
-  const raw = document as unknown as Record<string, unknown>;
-  if (typeof raw['swagger'] === 'string') {
+  let raw = document as unknown as Record<string, unknown>;
+  let convertedFrom: string | undefined;
+  if (isSwagger2(raw)) {
+    // Validated as 2.0 (swagger-parser also checks path parameters and operationIds there), then converted.
+    if (options.validate ?? true) await validate(document, label, () => []);
+    convertedFrom = String(raw['swagger']);
+    raw = convertSwagger2(raw);
+    document = raw as unknown as OpenApiDocument;
+  } else if (typeof raw['swagger'] === 'string') {
     throw new SteadySdkError('SPEC_UNSUPPORTED', `Swagger ${raw['swagger']} documents are not supported`, {
-      hint: 'Convert the spec to OpenAPI 3 first, e.g. `npx swagger2openapi swagger.yaml -o openapi.yaml`.',
+      hint: 'steadysdk reads Swagger 2.0 and OpenAPI 3.0 / 3.1.',
     });
   }
   const openapiVersion = typeof raw['openapi'] === 'string' ? raw['openapi'] : '';
   const dialect = openapiVersion.startsWith('3.0.') ? '3.0' : openapiVersion.startsWith('3.1.') ? '3.1' : undefined;
   if (!dialect) {
     throw new SteadySdkError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${openapiVersion || '(missing)'}"`, {
-      hint: 'steadysdk supports OpenAPI 3.0.x and 3.1.x.',
+      hint: 'steadysdk supports Swagger 2.0 and OpenAPI 3.0.x / 3.1.x.',
     });
   }
-
-  if (options.validate ?? true) {
-    let details: string[];
-    try {
-      // validate() dereferences in place, so hand it a copy and keep the bundled $refs intact.
-      details = semanticErrors(await SwaggerParser.validate(structuredClone(document)));
-    } catch (error) {
-      details = validationDetails(error);
-    }
-    if (details.length > 0) {
-      throw new SteadySdkError('SPEC_INVALID', `OpenAPI spec failed validation: ${label}`, {
-        details,
-        hint: 'Fix the reported problems, or set `validate: false` in your config to generate anyway.',
-      });
-    }
-  }
+  if ((options.validate ?? true) && !convertedFrom) await validate(document, label, semanticErrors);
 
   const files = parser.$refs.paths().filter((file) => !isUrl(file)).map(toPath);
-  return { document, openapiVersion, dialect, source: label, files, hash: sha256(canonicalJson(document)) };
+  return { document, openapiVersion, dialect, convertedFrom, source: label, files, hash: sha256(canonicalJson(document)) };
+}
+
+async function validate(document: OpenApiDocument, label: string, extraChecks: (api: OpenApiDocument) => string[]): Promise<void> {
+  let details: string[];
+  try {
+    // validate() dereferences in place, so hand it a copy and keep the bundled $refs intact.
+    details = extraChecks((await SwaggerParser.validate(structuredClone(document))) as OpenApiDocument);
+  } catch (error) {
+    details = validationDetails(error);
+  }
+  if (details.length > 0) {
+    throw new SteadySdkError('SPEC_INVALID', `OpenAPI spec failed validation: ${label}`, {
+      details,
+      hint: 'Fix the reported problems, or set `validate: false` in your config to generate anyway.',
+    });
+  }
 }
 
 /** Serves every local file (the root and its `$ref`s) from the git revision instead of the working tree. */

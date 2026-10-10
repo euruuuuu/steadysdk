@@ -24,10 +24,10 @@ tenth and hundredth generation.
 | You are editing the spec | Re-run the generator by hand | `steadysdk watch` regenerates on every save |
 | CI | — | A GitHub Action fails when the SDK is stale, or on breaking changes without a major version bump |
 
-> **Status:** early development (0.1.0). Everything in this README works today, but steadysdk is not on npm
-> yet: [run it from source](#try-it). The npm release and a VS Code extension are next ([Roadmap](#roadmap)).
+> **Status:** 0.1.0, early development. Everything in this README works today; the npm release is being
+> prepared, so for now [run it from source](#try-it). See the [changelog](CHANGELOG.md) and [roadmap](#roadmap).
 
-**Contents:** [Try it](#try-it) · [What gets generated](#what-gets-generated) ·
+**Contents:** [Try it](#try-it) · [Tested on real APIs](#tested-on-real-apis) · [What gets generated](#what-gets-generated) ·
 [Maintenance model](#maintenance-model) · [API changes](#api-changes-and-breaking-changes) ·
 [Watch mode](#watch-mode) · [CI](#ci-keep-the-sdk-and-the-api-honest) ·
 [Customizing](#customizing-the-generated-code) · [Naming](#naming-conventions) ·
@@ -67,6 +67,25 @@ The generated code has no dependencies (it uses `fetch`) and type-checks under t
 (`strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `isolatedDeclarations`, ...).
 See [`examples/petstore/sdk`](examples/petstore/sdk) for real output.
 
+## Tested on real APIs
+
+Every SDK below is generated from the provider's published spec (pinned to a commit) and type-checked under the
+strictest compiler settings. `npm run test:real-world` reproduces the table, and a
+[weekly workflow](.github/workflows/real-world.yml) keeps it honest.
+
+| API | Operations | Schemas | Generate | Type-check (strict) |
+| --- | ---: | ---: | ---: | --- |
+| GitHub (OpenAPI 3.0) | 1232 | 994 | 1.8 s | ✅ 0 errors |
+| GitHub (OpenAPI 3.1, with 274 webhooks) | 1232 | 973 | 2.1 s | ✅ 0 errors |
+| Stripe | 612 | 1538 | 1.2 s | ✅ 0 errors |
+| OpenAI | 359 | 2048 | 0.9 s | ✅ 0 errors |
+| Twilio | 197 | 150 | 0.4 s | ✅ 0 errors |
+| Kubernetes (Swagger 2.0) | 1158 | 816 | 1.1 s | ✅ 0 errors |
+
+Running them shaped the tool. Untagged specs such as Stripe's now group operations by path instead of piling
+600 methods onto one class. 3.1-style `anyOf: [X, {type: 'null'}]` reads the same as 3.0's `nullable`. With
+that, diffing GitHub's 3.0 description against its 3.1 one reports only real differences between the two files.
+
 ## What gets generated
 
 ```
@@ -74,7 +93,8 @@ sdk/
 ├── generated/            ← owned by steadysdk, rewritten on every run. Edit only inside custom regions.
 │   ├── runtime.ts        fetch wrapper: auth, query/path/header serialization, errors, timeouts, hooks
 │   ├── models.ts         one type per components.schemas entry
-│   ├── api/pets.ts       one class per tag: PetsApi with listPets(), createPet(), ...
+│   ├── api/pets.ts       one class per tag (or path segment): PetsApi with listPets(), createPet(), ...
+│   ├── webhooks.ts       WebhookPayloads: the body each webhook delivers (when the spec has webhooks)
 │   ├── client.ts         GeneratedClient wiring the groups together
 │   └── index.ts
 ├── client.ts             ← created once, then yours: class PetstoreClient extends GeneratedClient {}
@@ -267,7 +287,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: euruuuuu/steadysdk@main     # pin a commit SHA for reproducible builds
+      - uses: euruuuuu/steadysdk@v0.1.0
         with:
           working-directory: .            # where .steadysdkrc.yml is (or below it)
           # require-bump: true            # breaking changes need a new major info.version (default)
@@ -368,8 +388,8 @@ When an operation has no `operationId`, names are derived from the path:
 | `POST /orders/{id}/cancel` | `cancelOrder` |
 | `GET /api/v2/people` | `listPeople` |
 
-Case styles (`camel`, `pascal`, `snake`, `constant`, `preserve`), prefixes/suffixes, grouping (`tag`, `path`,
-`none`) and helper-type templates (`{Operation}Params`, ...) are all configurable. Names that clash with
+Case styles (`camel`, `pascal`, `snake`, `constant`, `preserve`), prefixes/suffixes, grouping (`auto`, `tag`,
+`path`, `none`; `auto` groups by tag when the spec uses tags and by path otherwise) and helper-type templates (`{Operation}Params`, ...) are all configurable. Names that clash with
 built-ins or with each other are resolved deterministically and reported.
 
 ## How it works
@@ -437,13 +457,15 @@ and a hint.
 
 ## Supported OpenAPI
 
-- OpenAPI 3.0.x and 3.1.x, YAML or JSON, local files or URLs, multi-file specs with external `$ref`s
+- OpenAPI 3.0.x and 3.1.x, and Swagger 2.0 (converted on load); YAML or JSON; local files, URLs or git
+  revisions; multi-file specs with external `$ref`s
 - Schemas: objects, arrays, enums, `const`, `nullable` and 3.1 type arrays, `allOf` / `oneOf` / `anyOf`,
   `additionalProperties`, recursive references
 - Parameters in path, query (all `style`/`explode` combinations), header and cookie
 - Bodies: JSON, `application/x-www-form-urlencoded`, `multipart/form-data` (with files), text, binary
 - Security: HTTP bearer/basic, API keys (header/query/cookie), OAuth2 and OpenID Connect tokens
-- Not yet: webhooks and callbacks (skipped with a note), Swagger 2.0 (convert with `swagger2openapi`)
+- Webhooks (3.1): payload types in `generated/webhooks.ts`, and webhook changes in the changelog
+- Not yet: callbacks, and output languages other than TypeScript
 
 ## Roadmap
 
@@ -453,16 +475,18 @@ and a hint.
 | B | Changelog & drift detection: `steadysdk diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
 | C | Maintenance: custom regions in generated files, ignore lists, template overrides (`steadysdk eject`) | ✅ Done |
 | D | `steadysdk watch`, CI gating on breaking changes without a version bump, GitHub Action | ✅ Done |
-| E | npm publish, polished `init`, VS Code extension (generate/diff commands, out-of-sync status bar) | Next |
+| E | Release prep: npm packages, polished `init`, real-world spec suite, Swagger 2.0, webhooks, `v0.1.0` | ✅ Done (npm publish pending) |
+| F | VS Code extension: generate/diff commands, out-of-sync status bar | Next |
 
 ## Development
 
 ```bash
 npm install
-npm run build          # tsc -b (TypeScript 7)
-npm test               # vitest: unit, golden-file, type-check, live-HTTP and git-based tests
-npm run typecheck      # sources, tests and the runtime template
-npm run examples       # regenerate examples/petstore/sdk and next/CHANGELOG.md after generator changes
+npm run build             # tsc -b (TypeScript 7)
+npm test                  # vitest: unit, golden-file, type-check, live-HTTP and git-based tests
+npm run typecheck         # sources, tests and the runtime template
+npm run examples          # regenerate examples/petstore/sdk and next/CHANGELOG.md after generator changes
+npm run test:real-world   # generate + strictly type-check SDKs for GitHub, Stripe, OpenAI, Twilio, Kubernetes
 ```
 
 Layout: [`packages/core`](packages/core) holds the engine (spec loading, IR, naming, generators, output

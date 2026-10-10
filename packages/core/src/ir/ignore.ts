@@ -1,6 +1,6 @@
 import type { IgnoreConfig } from '../config/schema.js';
 import { Diagnostics } from '../diagnostics.js';
-import type { ApiModel, Operation, SchemaNode } from './model.js';
+import type { ApiModel, Operation, SchemaNode, Webhook } from './model.js';
 import { mapRefs, reachability, refsOf } from './refs.js';
 
 interface Rule {
@@ -60,6 +60,7 @@ export function applyIgnore(model: ApiModel, ignore: IgnoreConfig, diagnostics: 
   let result: ApiModel = {
     ...model,
     operations: operations.map((op) => mapOperationSchemas(op, (node) => detach(node, `\`${op.key}\``))),
+    webhooks: model.webhooks.map((hook) => mapWebhookSchemas(hook, (node) => detach(node, `webhook \`${hook.key}\``))),
     schemas: model.schemas
       .filter(({ key }) => !ignored.has(key))
       .map(({ key, schema }) => ({ key, schema: detach(schema, `schema \`${key}\``) })),
@@ -72,7 +73,8 @@ export function applyIgnore(model: ApiModel, ignore: IgnoreConfig, diagnostics: 
   if (ignore.unusedSchemas) {
     const reachable = reachability(result);
     const kept = new Set<string>();
-    for (const node of result.operations.flatMap(operationSchemas)) {
+    const payloads = result.webhooks.flatMap((hook) => (hook.payload?.content ?? []).map((media) => media.schema));
+    for (const node of [...result.operations.flatMap(operationSchemas), ...payloads]) {
       for (const ref of refsOf(node)) for (const key of reachable(ref)) kept.add(key);
     }
     for (const { key } of result.schemas) if (!kept.has(key)) ignored.add(key);
@@ -127,6 +129,13 @@ function operationSchemas(op: Operation): SchemaNode[] {
     ...(op.requestBody?.content ?? []).map((media) => media.schema),
     ...op.responses.flatMap((response) => response.content.map((media) => media.schema)),
   ];
+}
+
+function mapWebhookSchemas(hook: Webhook, map: (node: SchemaNode) => SchemaNode): Webhook {
+  return {
+    ...hook,
+    payload: hook.payload && { ...hook.payload, content: hook.payload.content.map((media) => ({ ...media, schema: map(media.schema) })) },
+  };
 }
 
 function mapOperationSchemas(op: Operation, map: (node: SchemaNode) => SchemaNode): Operation {

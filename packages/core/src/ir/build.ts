@@ -12,6 +12,7 @@ import {
   type RequestBody,
   type Response,
   type ScalarType,
+  type Webhook,
   type SchemaMeta,
   type SchemaNode,
   type SecurityRequirement,
@@ -47,9 +48,6 @@ class ModelBuilder {
 
   build(): ApiModel {
     const info = isObject(this.doc['info']) ? this.doc['info'] : {};
-    if (isObject(this.doc['webhooks']) && Object.keys(this.doc['webhooks']).length > 0) {
-      this.diagnostics.info('WEBHOOKS_IGNORED', 'Webhooks are not part of the generated client and were skipped.', '#/webhooks');
-    }
     return {
       title: asString(info['title']) ?? 'API',
       version: asString(info['version']) ?? '0.0.0',
@@ -60,6 +58,7 @@ class ModelBuilder {
         .map((tag) => ({ name: asString(tag['name']) ?? '', description: asString(tag['description']) }))
         .filter((tag) => tag.name !== ''),
       operations: this.operations(),
+      webhooks: this.webhooks(),
       schemas: this.schemas(),
       securitySchemes: this.securitySchemes(),
     };
@@ -231,6 +230,30 @@ class ModelBuilder {
     return operations;
   }
 
+  private webhooks(): Webhook[] {
+    const webhooks = isObject(this.doc['webhooks']) ? this.doc['webhooks'] : {};
+    const out: Webhook[] = [];
+    for (const [name, rawItem] of Object.entries(webhooks)) {
+      const at = `#/webhooks/${escapePointer(name)}`;
+      const item = this.deref(rawItem, at);
+      if (!item) continue;
+      const methods = HTTP_METHODS.filter((method) => isObject(item[method]));
+      for (const method of methods) {
+        const op = item[method] as Json;
+        out.push({
+          key: methods.length === 1 ? name : `${name} ${method.toUpperCase()}`,
+          name,
+          method,
+          summary: asString(op['summary']),
+          description: asString(op['description']),
+          deprecated: op['deprecated'] === true,
+          payload: this.requestBody(op['requestBody'], `${at}/${method}/requestBody`),
+        });
+      }
+    }
+    return out;
+  }
+
   private parameters(raw: unknown, at: string): Parameter[] {
     const out: Parameter[] = [];
     asArray(raw).forEach((rawParam, index) => {
@@ -322,9 +345,19 @@ class ModelBuilder {
 
     const composed = this.composition(raw, at, stack);
     let own = this.ownSchema(raw, nonNullTypes, at, stack);
-    // `type: object` next to oneOf/allOf adds nothing unless it declares properties of its own.
-    if (composed && own?.kind === 'object' && own.properties.length === 0 && own.additionalProperties === undefined) {
-      own = undefined;
+    if (composed && own) {
+      if (own.kind === 'scalar' && own.type === 'null' && !own.enum) {
+        // `type: 'null'` next to a composition is how converted 3.1 specs say "nullable".
+        own = undefined;
+        meta.nullable = true;
+      } else if (
+        (own.kind === 'object' && own.properties.length === 0 && own.additionalProperties === undefined) ||
+        covers(bareTypes(own), this.typesOf(composed))
+      ) {
+        // `type: object` without properties of its own, or a bare `type` that only repeats what the variants
+        // say (`type: [string, array]` next to `oneOf: [string, array]`), adds nothing to the composition.
+        own = undefined;
+      }
     }
 
     let node: SchemaNode;
@@ -424,6 +457,7 @@ class ModelBuilder {
 
     if (SCALAR_TYPES.has(type)) {
       const node: SchemaNode = { kind: 'scalar', type: type as ScalarType };
+      if (type === 'null') node.nullable = true; // the one value it allows; keeps it comparable with `nullable`
       if (typeof raw['format'] === 'string') node.format = raw['format'];
       if (enumValues) {
         const nonNull = enumValues.filter((value) => value !== null);
@@ -444,6 +478,28 @@ class ModelBuilder {
     return values.length > 0 ? values : undefined;
   }
 
+  /** JSON types a composed schema can take (`ref`s by their target's declared type, objects by default). */
+  private typesOf(node: SchemaNode): Set<string> {
+    switch (node.kind) {
+      case 'union':
+        return new Set(node.variants.flatMap((variant) => [...this.typesOf(variant)]));
+      case 'intersection':
+        return new Set(node.parts.flatMap((part) => [...this.typesOf(part)]));
+      case 'scalar':
+        return new Set([node.type === 'integer' ? 'number' : node.type]);
+      case 'ref': {
+        const target = this.componentSchemas[node.target];
+        const declared = isObject(target) ? target['type'] : undefined;
+        const types = (Array.isArray(declared) ? declared : [declared]).filter((type): type is string => typeof type === 'string');
+        return new Set(types.length > 0 ? types.filter((type) => type !== 'null').map((type) => (type === 'integer' ? 'number' : type)) : ['object']);
+      }
+      case 'unknown':
+        return new Set(['unknown']);
+      default:
+        return new Set([node.kind]);
+    }
+  }
+
   private composition(raw: Json, at: string, stack: ReadonlySet<string>): SchemaNode | undefined {
     const convert = (keyword: string): SchemaNode[] =>
       asArray(raw[keyword]).map((schema, index) => this.schema(schema, `${at}/${keyword}/${index}`, stack));
@@ -453,8 +509,17 @@ class ModelBuilder {
     if (allOf.length > 0) parts.push(...allOf);
 
     for (const keyword of ['oneOf', 'anyOf'] as const) {
-      const variants = convert(keyword);
-      if (variants.length === 0) continue;
+      const all = convert(keyword);
+      if (all.length === 0) continue;
+      // 3.1 writes "nullable" as a `{ type: 'null' }` variant: normalize it to the flag 3.0 uses, so both
+      // dialects produce the same model (and the same diff baseline).
+      const nonNull = all.filter((variant) => !isNullSchema(variant));
+      const nullable = nonNull.length > 0 && nonNull.length < all.length;
+      const variants = nullable ? nonNull : all;
+      if (nullable && variants.length === 1) {
+        parts.push(applyMeta(variants[0]!, { nullable: true }));
+        continue;
+      }
       const discriminator = isObject(raw['discriminator']) ? raw['discriminator'] : undefined;
       const propertyName = asString(discriminator?.['propertyName']);
       const mapping = isObject(discriminator?.['mapping'])
@@ -467,6 +532,7 @@ class ModelBuilder {
         exclusive: keyword === 'oneOf',
         variants,
         discriminator: propertyName ? { propertyName, mapping } : undefined,
+        ...(nullable && { nullable: true }),
       });
     }
 
@@ -487,6 +553,41 @@ function applyMeta(node: SchemaNode, meta: SchemaMeta): SchemaNode {
     return applyMeta(parts[0]!, rest);
   }
   return merged;
+}
+
+/**
+ * The JSON types a schema allows when it is nothing but a type constraint (`type: string`, `type: [string, array]`
+ * with no enum, format, items or properties); undefined otherwise. `integer` counts as `number`.
+ */
+function bareTypes(node: SchemaNode): Set<string> | undefined {
+  switch (node.kind) {
+    case 'scalar':
+      return node.enum || node.format ? undefined : new Set([node.type === 'integer' ? 'number' : node.type]);
+    case 'array':
+      return node.items.kind === 'unknown' ? new Set(['array']) : undefined;
+    case 'object':
+      return node.properties.length === 0 && node.additionalProperties === undefined ? new Set(['object']) : undefined;
+    case 'union': {
+      const all = new Set<string>();
+      for (const variant of node.variants) {
+        const types = bareTypes(variant);
+        if (!types) return undefined;
+        for (const type of types) all.add(type);
+      }
+      return all;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function covers(outer: ReadonlySet<string> | undefined, inner: ReadonlySet<string>): boolean {
+  return outer !== undefined && [...inner].every((type) => outer.has(type));
+}
+
+/** `{ type: 'null' }` (or `enum: [null]`) with nothing else that matters. */
+function isNullSchema(node: SchemaNode): boolean {
+  return node.kind === 'scalar' && node.type === 'null' && (node.enum === undefined || node.enum.every((value) => value === null));
 }
 
 function isEnumValue(value: unknown): value is EnumValue {

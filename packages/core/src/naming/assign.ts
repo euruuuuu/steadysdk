@@ -120,7 +120,8 @@ export function assignNames(options: AssignNamesOptions): AssignNamesResult {
   const nameOf = (id: string): string => assigned.get(id)!;
 
   // Group ids, in order of first use.
-  const groupBy = config.client.groupBy;
+  // `auto`: by tag when the spec tags its operations, else by path (Stripe-style specs have no tags at all).
+  const groupBy = config.client.groupBy === 'auto' ? (model.operations.some((op) => op.tags.length > 0) ? 'tag' : 'path') : config.client.groupBy;
   const groupOfOp = new Map(model.operations.map((op) => [op.key, engine.groupOf(op, groupBy)]));
   const groupIds = [...new Set(groupOfOp.values())].filter((id) => id !== '');
 

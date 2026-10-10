@@ -16,6 +16,8 @@ export interface ApiModel {
   servers: Server[];
   tags: Tag[];
   operations: Operation[];
+  /** OpenAPI 3.1 `webhooks`: requests the API sends to its clients. */
+  webhooks: Webhook[];
   /** `components.schemas`, in document order. */
   schemas: NamedSchema[];
   securitySchemes: SecurityScheme[];
@@ -54,6 +56,18 @@ export interface Operation {
   responses: Response[];
   /** Effective security (global default applied). Alternatives are OR-ed; `[]` means no auth. */
   security: SecurityRequirement[];
+}
+
+/** A request the API sends to its clients (OpenAPI 3.1 `webhooks`). Its body is what a handler receives. */
+export interface Webhook {
+  /** Stable identity: the webhook name, plus the method when it has several (`newPet`, `newPet PUT`). */
+  key: string;
+  name: string;
+  method: HttpMethod;
+  summary?: string | undefined;
+  description?: string | undefined;
+  deprecated: boolean;
+  payload?: RequestBody | undefined;
 }
 
 export type ParameterLocation = 'path' | 'query' | 'header' | 'cookie';

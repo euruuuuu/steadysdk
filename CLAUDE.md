@@ -1,8 +1,8 @@
 # steadysdk — OpenAPI SDK generator & maintainer
 
-TypeScript CLI that generates typed API clients from OpenAPI 3.0/3.1 and keeps them maintainable across
+TypeScript CLI that generates typed API clients from OpenAPI 3.0/3.1 (and Swagger 2.0) and keeps them maintainable across
 regenerations: user code is never overwritten, names stay stable (name lock), and API changes are reported
-as a changelog with breaking-change detection. Portfolio project; README.md is the public face.
+as a changelog with breaking-change detection. Portfolio project (featured on the author's portfolio site); README.md is the public face.
 Published at github.com/euruuuuu/steadysdk. Renamed from `sdkgen` on 2026-10-10, before any npm release: npm
 packages `steadysdk` (CLI, bin `steadysdk`) and `@steadysdk/core` (the scope needs an npm org); config
 `.steadysdkrc.yml`, bookkeeping `<output>/.steadysdk/`, region markers `// <steadysdk:custom name>`.
@@ -25,7 +25,8 @@ packages `steadysdk` (CLI, bin `steadysdk`) and `@steadysdk/core` (the scope nee
 | B | Drift/changelog: IR-level diff (ops, params, bodies, responses, schemas, enums, required flags, security, servers), direction-aware breaking classification, Markdown + versioned JSON, `steadysdk diff` (`--json --fail-on-breaking -i`) / `steadysdk changelog` (`--out`), changes listed by `generate` (and `--check`), petstore `next/` changelog example | ✅ Done 2026-10-10 |
 | C | Custom regions (`// <steadysdk:custom name>`) in generated files (API imports/members, models declarations) merged on regeneration; `ignore` (operations/paths/tags/schemas/unusedSchemas, unmatched-entry warnings); `templates.runtime` override + `steadysdk eject runtime` (export contract check, fingerprint outdated warning), `templates.header`; Petstore example carries a region helper | ✅ Done 2026-10-10 |
 | D | `steadysdk watch` (directory watches, debounce, keeps going on errors, `Io.signal`); specs at git revisions (`loadSpec({revision})`, custom ref-parser resolver, `--base`, `<rev>:<path>`); `diff --require-bump` (`checkVersionBump`); composite GitHub Action (`action.yml` + `scripts/github-action.sh`, tested locally in a temp repo, dogfooded in CI) | ✅ Done 2026-10-10 |
-| E | npm publish (needs the `steadysdk` npm org for `@steadysdk/core`), polished `init`, README badges/install, VS Code extension reusing core (commands, out-of-sync status bar, CodeLens) | Next |
+| E | Release prep: real-world suite (`scripts/real-world.mjs`, GitHub/Stripe/OpenAI/Twilio/Kubernetes pinned) and what it surfaced (`groupBy: auto`, 3.1 null-variant normalization, wrapped imports, unsupported-version errors); Swagger 2.0 (built-in converter); webhooks (IR, `generated/webhooks.ts`, diff); npm packaging (metadata, READMEs, LICENSE, clean `prepack`, no source maps; verified by installing the tarballs); polished `init`; CHANGELOG.md; tag `v0.1.0` | ✅ Done 2026-10-10 (npm publish waits on the user's npm login) |
+| F | VS Code extension reusing core (commands, out-of-sync status bar, CodeLens) | Next |
 
 ## Commands
 
@@ -34,6 +35,7 @@ npm run build        # tsc -b  → packages/*/dist
 npm test             # vitest (runs against src via alias; no build needed)
 npm run typecheck    # tsc -b + tsconfig.tests.json (tests + runtime template)
 npm run examples     # build, then regenerate examples/petstore/sdk and examples/petstore/next/CHANGELOG.md
+npm run test:real-world   # build, then generate + strictly type-check SDKs for pinned public specs (downloads to .cache/)
 node packages/cli/dist/index.js generate -C examples/petstore --verbose
 node packages/cli/dist/index.js diff -C examples/petstore -i next/openapi.yaml
 ```
@@ -46,10 +48,14 @@ npm workspaces, ESM only, Node ≥ 22.19 (swagger-parser 13 requires it).
 packages/core/src
   spec/load.ts         swagger-parser bundle (external $refs in, internal kept) + validate; spec/semantic.ts adds
                        path-param and operationId checks (swagger-parser skips them for OAS3). `files` lists the local
-                       files of the spec (for watch); `revision` reads them all from git via spec/git.ts
-  ir/model.ts          IR types: ApiModel, Operation, Parameter, SchemaNode (ref|scalar|array|object|union|intersection|unknown)
-  ir/build.ts          OpenAPI → IR. Handles 3.0/3.1 (nullable, type arrays, const), $ref chains, param merging,
-                       security inheritance. Component schema refs stay `{kind:'ref', target: key}`; others are inlined.
+                       files of the spec (for watch); `revision` reads them all from git via spec/git.ts. Swagger 2.0
+                       is validated as 2.0, then converted by spec/swagger2.ts (`convertedFrom: '2.0'`)
+  spec/swagger2.ts     Swagger 2.0 → OpenAPI 3.0 document: body/formData → requestBody, consumes/produces → media
+                       types, collectionFormat → style/explode, host/basePath → servers, securityDefinitions, x-nullable
+  ir/model.ts          IR types: ApiModel, Operation, Webhook, Parameter, SchemaNode (ref|scalar|array|object|union|intersection|unknown)
+  ir/build.ts          OpenAPI → IR. Handles 3.0/3.1 (nullable, type arrays, const, `{type:null}` variants → nullable,
+                       redundant `type` next to oneOf/anyOf dropped), $ref chains, param merging, security inheritance,
+                       webhooks. Component schema refs stay `{kind:'ref', target: key}`; others are inlined.
   ir/refs.ts           refsOf / reachability / mapRefs over SchemaNode (shared by ignore and diff)
   ir/ignore.ts         applyIgnore(model, config.ignore): drops ops/schemas, ignored refs → unknown, warns on unmatched
   config/schema.ts     zod schema for .steadysdkrc.yml (strict objects; use .prefault({}) for nested defaults in Zod 4)
@@ -82,6 +88,7 @@ packages/cli/src       commander program (cli.ts `run(argv, io)` is in-process t
                        (directory-based FileWatcher), changes.ts (terminal change list), ui.ts
 action.yml             composite GitHub Action: Node check/setup, builds the CLI from its checkout (until npm),
                        runs scripts/github-action.sh (inputs via env, never interpolated into the script)
+scripts/real-world.mjs pinned public specs → generate → strict tsc; prints a Markdown table (weekly workflow too)
 ```
 
 Output layout: `<out>/generated/**` (steadysdk-owned, manifest-tracked), `<out>/index.ts` + `<out>/client.ts`
@@ -112,5 +119,10 @@ Output layout: `<out>/generated/**` (steadysdk-owned, manifest-tracked), `<out>/
 - scripts/github-action.sh must run on bash 3.2 (macOS, where its tests run): guard empty arrays with
   `${arr[@]+"${arr[@]}"}`. CLI output parsed by the script is produced with `--no-color` (GitHub sets CI=true).
 - packages/cli/test/github-action.test.ts runs `tsc -b` first, because the script runs the built CLI.
+- Grouping `auto` (default) = tag when any operation has tags, else first path segment (see naming/assign.ts).
+- Webhook keys (`WebhookPayloads` property names) are a compatibility surface like region names.
+- Releasing: bump `version` in both packages (and the CLI's `@steadysdk/core` dependency), add a CHANGELOG.md section,
+  commit, tag `vX.Y.Z` (the Action is pinned by tag), push with tags, then `npm publish -w packages/core` before
+  `npm publish -w packages/cli` (the CLI depends on core). `prepack` rebuilds dist/ from scratch.
 - Tool quirk: typing ` `-style escapes through the Write tool turns them into raw characters; write them via
   a script (e.g. python with `chr(92)`) and grep for U+2028/2029 afterwards.

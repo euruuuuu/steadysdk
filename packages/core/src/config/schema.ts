@@ -146,7 +146,7 @@ export const configSchema = z.strictObject({
       /** Root client class name. Defaults to the spec title + `Client`. */
       name: z.string().regex(/^[A-Za-z_$][A-Za-z0-9_$]*$/, 'Must be a valid identifier').optional(),
       /** How operations are grouped into sub-clients: by first tag, by first path segment, or not at all. */
-      groupBy: z.enum(['tag', 'path', 'none']).default('tag'),
+      groupBy: z.enum(['auto', 'tag', 'path', 'none']).default('auto'),
       /** Overrides the default base URL taken from `servers[0]`. */
       baseUrl: z.string().optional(),
     })

@@ -1,4 +1,4 @@
-import type { ApiModel, MediaType, Operation, Parameter, SecurityScheme } from '../ir/model.js';
+import type { ApiModel, MediaType, Operation, Parameter, SecurityScheme, Webhook } from '../ir/model.js';
 import { SchemaComparer, schemaUsage, type Direction, type SchemaChange, type SchemaUsage } from './schema.js';
 import { code, lowerFirst } from './text.js';
 import { DIFF_FORMAT_VERSION, type ApiDiff, type Change } from './types.js';
@@ -24,7 +24,7 @@ type OperationChange = Omit<Change, 'scope' | 'operation' | 'operationId'>;
 type Push = (change: OperationChange) => Change;
 
 const CHANGE_KEYS = [
-  'kind', 'breaking', 'scope', 'operation', 'operationId', 'schema', 'securityScheme',
+  'kind', 'breaking', 'scope', 'operation', 'operationId', 'webhook', 'schema', 'securityScheme',
   'location', 'schemaPath', 'message', 'before', 'after', 'affects',
 ] as const satisfies ReadonlyArray<keyof Change>;
 
@@ -53,6 +53,7 @@ class ModelDiffer {
 
   run(): Change[] {
     this.operations();
+    this.webhooks();
     this.componentSchemas();
     this.securitySchemes();
     this.servers();
@@ -238,11 +239,11 @@ class ModelDiffer {
     location: string,
     direction: Direction,
     push: Push,
+    verb = direction === 'request' ? 'accepted' : 'returned',
   ): void {
     const several = a.length > 1 || b.length > 1;
     const before = new Map(a.map((media) => [media.contentType, media]));
     const after = new Set(b.map((media) => media.contentType));
-    const verb = direction === 'request' ? 'accepted' : 'returned';
     for (const media of b) {
       const previous = before.get(media.contentType);
       if (!previous) {
@@ -293,6 +294,36 @@ class ModelDiffer {
         ...(change.before !== undefined && { before: change.before }),
         ...(change.after !== undefined && { after: change.after }),
       });
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Webhooks: the payload travels to the client, so it follows the response rules.
+
+  private webhooks(): void {
+    const before = new Map(this.from.webhooks.map((hook) => [hook.key, hook]));
+    const after = new Set(this.to.webhooks.map((hook) => hook.key));
+    const pusher =
+      (hook: Webhook): Push =>
+      (change) => {
+        const full: Change = { scope: 'webhook', webhook: hook.key, ...change };
+        this.changes.push(full);
+        return full;
+      };
+    for (const hook of this.to.webhooks) {
+      const push = pusher(hook);
+      const previous = before.get(hook.key);
+      if (!previous) {
+        push({ kind: 'webhook-added', breaking: false, message: 'Webhook added.' });
+        continue;
+      }
+      if (!previous.deprecated && hook.deprecated) push({ kind: 'deprecated', breaking: false, message: 'Webhook is now deprecated.' });
+      if (previous.deprecated && !hook.deprecated) push({ kind: 'undeprecated', breaking: false, message: 'Webhook is no longer deprecated.' });
+      this.content(previous.payload?.content ?? [], hook.payload?.content ?? [], 'Payload', 'payload', 'response', push, 'sent');
+    }
+    for (const hook of this.from.webhooks) {
+      // Handlers typed with the SDK's WebhookPayloads lose their type.
+      if (!after.has(hook.key)) pusher(hook)({ kind: 'webhook-removed', breaking: true, message: 'Webhook removed.' });
     }
   }
 

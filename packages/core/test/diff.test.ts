@@ -15,7 +15,7 @@ function diff(from: string, to: string): ApiDiff {
 /** `! kind subject: message` per change; `!` marks breaking ones. */
 function lines(from: string, to: string): string[] {
   return diff(from, to).changes.map((change) => {
-    const subject = change.operation ?? change.schema ?? change.securityScheme ?? 'API';
+    const subject = change.operation ?? change.webhook ?? change.schema ?? change.securityScheme ?? 'API';
     return `${change.breaking ? '!' : ' '} ${change.kind} ${subject}: ${change.message}`;
   });
 }
@@ -286,6 +286,30 @@ describe('component schemas', () => {
 function returnsRef(name: string, components: string): string {
   return op(`responses:\n  '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/${name}' } } } }`, components);
 }
+
+describe('webhooks', () => {
+  const hook = (payload: string, extra = '') =>
+    `openapi: 3.1.0\nwebhooks:\n  petAdopted:\n    post:${extra}\n      requestBody:\n        content:\n          application/json:\n            schema: ${payload}\n      responses: { '200': { description: ok } }`;
+
+  it('reports added and removed webhooks', () => {
+    expect(lines('openapi: 3.1.0', hook('{ type: object }'))).toEqual(['  webhook-added petAdopted: Webhook added.']);
+    expect(lines(hook('{ type: object }'), 'openapi: 3.1.0')).toEqual(['! webhook-removed petAdopted: Webhook removed.']);
+  });
+
+  it('judges payload changes like responses, since clients receive them', () => {
+    const payload = (values: string) => `{ type: object, required: [status], properties: { status: { type: string, enum: [${values}] } } }`;
+    expect(lines(hook(payload('a')), hook(payload('a, b')))).toEqual(['! enum-value-added petAdopted: Payload: enum value `b` was added to `status`.']);
+    expect(lines(hook(payload('a, b')), hook(payload('a')))).toEqual(['  enum-value-removed petAdopted: Payload: enum value `b` was removed from `status`.']);
+    expect(lines(hook(payload('a')), hook(payload('a'), '\n      deprecated: true'))).toEqual(['  deprecated petAdopted: Webhook is now deprecated.']);
+  });
+
+  it('counts webhook payloads as received data when judging shared schemas', () => {
+    const spec = (values: string) =>
+      `${hook("{ $ref: '#/components/schemas/Status' }")}\ncomponents:\n  schemas:\n    Status: { type: string, enum: [${values}] }`;
+    const [change] = diff(spec('a, b'), spec('a')).changes;
+    expect(change).toMatchObject({ kind: 'enum-value-removed', breaking: false, affects: ['webhook petAdopted'] });
+  });
+});
 
 describe('security and servers', () => {
   const secured = (security: string, schemes = 'bearer: { type: http, scheme: bearer }') =>
