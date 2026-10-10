@@ -1,9 +1,11 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import type { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
 import { SteadySdkError } from '../errors.js';
 import { canonicalJson, sha256 } from '../util/hash.js';
+import { openRevision, type GitRevision } from './git.js';
 import { semanticErrors } from './semantic.js';
 
 export type OpenApiDocument = OpenAPIV3.Document | OpenAPIV3_1.Document;
@@ -14,8 +16,10 @@ export interface LoadedSpec {
   /** The `openapi` field verbatim, e.g. `3.0.3`. */
   openapiVersion: string;
   dialect: '3.0' | '3.1';
-  /** Absolute file path or URL the spec was read from. */
+  /** Absolute file path or URL the spec was read from; `<revision>:<path>` when read from git. */
   source: string;
+  /** Local files the spec is made of (the root file, then files reached through external `$ref`s). */
+  files: string[];
   /** sha256 of the canonical JSON of the bundled document. */
   hash: string;
 }
@@ -25,6 +29,8 @@ export interface LoadSpecOptions {
   validate?: boolean;
   /** Base directory for relative `source` paths. Defaults to `process.cwd()`. */
   cwd?: string;
+  /** Read the spec, and the local files it references, as they were at this git revision. */
+  revision?: string | undefined;
 }
 
 const isUrl = (value: string): boolean => /^https?:\/\//i.test(value);
@@ -32,8 +38,14 @@ const isUrl = (value: string): boolean => /^https?:\/\//i.test(value);
 /** Reads, bundles and (optionally) validates an OpenAPI 3.0 / 3.1 document in YAML or JSON. */
 export async function loadSpec(source: string, options: LoadSpecOptions = {}): Promise<LoadedSpec> {
   const resolved = isUrl(source) ? source : path.resolve(options.cwd ?? process.cwd(), source);
+  if (options.revision !== undefined && isUrl(resolved)) {
+    throw new SteadySdkError('SPEC_UNSUPPORTED', `Cannot read ${resolved} from git: it is a URL`, {
+      hint: 'Git revisions work for specs stored in the repository.',
+    });
+  }
+  const git = options.revision === undefined ? undefined : await openRevision(options.revision, path.dirname(resolved));
 
-  if (!isUrl(resolved)) {
+  if (!isUrl(resolved) && !git) {
     const info = await stat(resolved).catch(() => undefined);
     if (!info?.isFile()) {
       throw new SteadySdkError('SPEC_NOT_FOUND', `OpenAPI spec not found: ${resolved}`, {
@@ -42,11 +54,16 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
     }
   }
 
+  // Fails with SPEC_NOT_FOUND when the file did not exist at that revision.
+  if (git) await git.read(resolved);
+
+  const parser = new SwaggerParser();
+  const label = git ? await git.label(resolved) : resolved;
   let document: OpenApiDocument;
   try {
-    document = (await SwaggerParser.bundle(resolved)) as OpenApiDocument;
+    document = (await parser.bundle(resolved, git ? { resolve: gitResolver(git) } : {})) as OpenApiDocument;
   } catch (error) {
-    throw new SteadySdkError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${resolved}`, {
+    throw new SteadySdkError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${label}`, {
       details: [errorMessage(error)],
       hint: 'The file must be valid YAML or JSON, and every external $ref must resolve.',
       cause: error,
@@ -76,14 +93,32 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
       details = validationDetails(error);
     }
     if (details.length > 0) {
-      throw new SteadySdkError('SPEC_INVALID', `OpenAPI spec failed validation: ${resolved}`, {
+      throw new SteadySdkError('SPEC_INVALID', `OpenAPI spec failed validation: ${label}`, {
         details,
         hint: 'Fix the reported problems, or set `validate: false` in your config to generate anyway.',
       });
     }
   }
 
-  return { document, openapiVersion, dialect, source: resolved, hash: sha256(canonicalJson(document)) };
+  const files = parser.$refs.paths().filter((file) => !isUrl(file)).map(toPath);
+  return { document, openapiVersion, dialect, source: label, files, hash: sha256(canonicalJson(document)) };
+}
+
+/** Serves every local file (the root and its `$ref`s) from the git revision instead of the working tree. */
+function gitResolver(git: GitRevision): SwaggerParser.Options['resolve'] {
+  return {
+    file: false,
+    git: { order: 1, canRead: (file) => !isUrl(file.url), read: (file) => git.read(toPath(file.url)) },
+  };
+}
+
+function toPath(url: string): string {
+  if (url.startsWith('file:')) return fileURLToPath(url);
+  try {
+    return decodeURI(url);
+  } catch {
+    return url;
+  }
 }
 
 function errorMessage(error: unknown): string {

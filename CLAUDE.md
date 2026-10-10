@@ -24,8 +24,8 @@ packages `steadysdk` (CLI, bin `steadysdk`) and `@steadysdk/core` (the scope nee
 | A | Workspace, spec loading + validation, IR, naming engine + name lock, TS generator, output planner (manifest, conflicts, stale deletion), CLI `init`/`generate` (`--dry-run --check --relock --force`), petstore example, CI | ✅ Done 2026-10-10 |
 | B | Drift/changelog: IR-level diff (ops, params, bodies, responses, schemas, enums, required flags, security, servers), direction-aware breaking classification, Markdown + versioned JSON, `steadysdk diff` (`--json --fail-on-breaking -i`) / `steadysdk changelog` (`--out`), changes listed by `generate` (and `--check`), petstore `next/` changelog example | ✅ Done 2026-10-10 |
 | C | Custom regions (`// <steadysdk:custom name>`) in generated files (API imports/members, models declarations) merged on regeneration; `ignore` (operations/paths/tags/schemas/unusedSchemas, unmatched-entry warnings); `templates.runtime` override + `steadysdk eject runtime` (export contract check, fingerprint outdated warning), `templates.header`; Petstore example carries a region helper | ✅ Done 2026-10-10 |
-| D | `steadysdk watch`, CI gating (fail on breaking changes without a version bump), GitHub Action example | Next |
-| E | VS Code extension reusing core (commands, out-of-sync status bar, CodeLens), npm publish prep, README polish/GIF | Planned |
+| D | `steadysdk watch` (directory watches, debounce, keeps going on errors, `Io.signal`); specs at git revisions (`loadSpec({revision})`, custom ref-parser resolver, `--base`, `<rev>:<path>`); `diff --require-bump` (`checkVersionBump`); composite GitHub Action (`action.yml` + `scripts/github-action.sh`, tested locally in a temp repo, dogfooded in CI) | ✅ Done 2026-10-10 |
+| E | npm publish (needs the `steadysdk` npm org for `@steadysdk/core`), polished `init`, README badges/install, VS Code extension reusing core (commands, out-of-sync status bar, CodeLens) | Next |
 
 ## Commands
 
@@ -45,7 +45,8 @@ npm workspaces, ESM only, Node ≥ 22.19 (swagger-parser 13 requires it).
 ```
 packages/core/src
   spec/load.ts         swagger-parser bundle (external $refs in, internal kept) + validate; spec/semantic.ts adds
-                       path-param and operationId checks (swagger-parser skips them for OAS3)
+                       path-param and operationId checks (swagger-parser skips them for OAS3). `files` lists the local
+                       files of the spec (for watch); `revision` reads them all from git via spec/git.ts
   ir/model.ts          IR types: ApiModel, Operation, Parameter, SchemaNode (ref|scalar|array|object|union|intersection|unknown)
   ir/build.ts          OpenAPI → IR. Handles 3.0/3.1 (nullable, type arrays, const), $ref chains, param merging,
                        security inheritance. Component schema refs stay `{kind:'ref', target: key}`; others are inlined.
@@ -72,11 +73,15 @@ packages/core/src
                        component schemas (direction from usage in both versions), security schemes, default server
   diff/render.ts       renderChangelog (Markdown), serializeDiff (JSON), diffTitle, changeSubject
   diff/baseline.ts     loadSpecSnapshot(outputDir): `.steadysdk/spec.json`, loaded without validation
+  diff/version.ts      checkVersionBump: breaking → new major info.version (new minor in 0.x; non-semver must change)
   generate.ts          orchestrator: load → model → ignore → baseline diff (ignore applied too) → lock → runtime
                        template → generate → plan → (refuse on conflicts unless force) → write
 packages/core/templates/typescript/runtime.ts   copied verbatim into generated/runtime.ts (type-checked by tsconfig.tests.json)
-packages/cli/src       commander program (cli.ts `run(argv, io)` is in-process testable), commands/ (init, generate,
-                       diff + changelog share `compareSpecs`, eject), changes.ts (terminal change list), ui.ts
+packages/cli/src       commander program (cli.ts `run(argv, io)` is in-process testable; `io.signal` stops watch),
+                       commands/ (init, generate, watch, diff + changelog share `compareSpecs`, eject), watcher.ts
+                       (directory-based FileWatcher), changes.ts (terminal change list), ui.ts
+action.yml             composite GitHub Action: Node check/setup, builds the CLI from its checkout (until npm),
+                       runs scripts/github-action.sh (inputs via env, never interpolated into the script)
 ```
 
 Output layout: `<out>/generated/**` (steadysdk-owned, manifest-tracked), `<out>/index.ts` + `<out>/client.ts`
@@ -104,5 +109,8 @@ Output layout: `<out>/generated/**` (steadysdk-owned, manifest-tracked), `<out>/
 - The diff JSON (`ApiDiff`, `DIFF_FORMAT_VERSION`) is a public format: add fields, never rename/remove; new keys
   must also go into `CHANGE_KEYS` (fixed key order). Messages are one sentence, subject-free, Markdown inline code.
 - Documentation-only edits (summary, description, examples) never produce changes.
+- scripts/github-action.sh must run on bash 3.2 (macOS, where its tests run): guard empty arrays with
+  `${arr[@]+"${arr[@]}"}`. CLI output parsed by the script is produced with `--no-color` (GitHub sets CI=true).
+- packages/cli/test/github-action.test.ts runs `tsc -b` first, because the script runs the built CLI.
 - Tool quirk: typing ` `-style escapes through the Write tool turns them into raw characters; write them via
   a script (e.g. python with `chr(92)`) and grep for U+2028/2029 afterwards.

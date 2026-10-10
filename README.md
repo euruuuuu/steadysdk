@@ -16,11 +16,13 @@ tenth and hundredth generation.
 | The API changes | You diff the YAML by hand | `steadysdk diff` lists every change and marks the breaking ones |
 | Release notes | Written by hand | `steadysdk changelog` writes them as Markdown or JSON |
 | Naming conventions | Generator's choice, drifts | Your rules, in config, applied every time |
-| CI | — | `generate --check` fails when the SDK is stale; `diff --fail-on-breaking` on breaking changes |
+| You are editing the spec | Re-run the generator by hand | `steadysdk watch` regenerates on every save |
+| CI | — | A GitHub Action fails when the SDK is stale, or on breaking changes without a major version bump |
 
-> **Status:** early development. Generation, naming rules, safe regeneration, the name lock, custom regions,
-> ignore lists, template overrides and the API changelog with breaking-change detection work today. Watch mode,
-> CI gating on version bumps and the VS Code extension are next (see [Roadmap](#roadmap)).
+> **Status:** early development, not yet on npm. Generation, naming rules, safe regeneration, the name lock,
+> custom regions, ignore lists, template overrides, the API changelog with breaking-change detection, watch
+> mode and CI gating (with a GitHub Action) work today. The npm release and a VS Code extension are next (see
+> [Roadmap](#roadmap)).
 
 ## Quick start
 
@@ -195,6 +197,73 @@ request bodies, authentication requirements, security schemes and the default se
 Documentation-only edits are ignored. Validation keywords (`maxLength`, `pattern`, `minimum`, ...) are not
 compared yet.
 
+## Watch mode
+
+```console
+$ steadysdk watch
+Using .steadysdkrc.yml
+✔ Loaded Swagger Petstore 1.0.0 (OpenAPI 3.0.3): 11 operations, 8 schemas
+  …
+✔ SDK written to sdk (81 ms)
+ℹ Watching 2 files for changes. Press Ctrl+C to stop.
+
+[09:13:52] openapi.yaml changed
+✔ Loaded Swagger Petstore 1.0.0 (OpenAPI 3.0.3): 11 operations, 8 schemas
+  …
+ℹ API changes since the last generation: 1 non-breaking
+    ~ GET /health: operationId changed from `healthCheck` to `health`.
+  7 unchanged
+✔ SDK written to sdk (48 ms)
+```
+
+`watch` regenerates whenever the spec, any file it references through `$ref`, the config or your runtime
+template changes, and lists the API changes each save made. A broken save (half-written YAML, an invalid spec)
+or a conflict is reported, and watching continues.
+
+## CI: keep the SDK and the API honest
+
+Two checks cover most mistakes:
+
+```bash
+steadysdk generate --check                 # the committed SDK is exactly what the spec produces
+steadysdk diff --base origin/main --require-bump
+```
+
+`--base <git-rev>` compares the configured spec with its version at a git revision. It reads that version
+straight from git, including every file it references, so you don't need a second checkout. `--require-bump`
+fails when there are breaking changes but `info.version` is not a new major version. Below 1.0.0, a new minor
+version is enough, as semver tooling treats 0.x. Versions that aren't semver, like `2024-06-01`, only have to
+change. Any argument can also name a file at a revision: `steadysdk diff main:openapi.yaml openapi.yaml`.
+
+### GitHub Action
+
+```yaml
+# .github/workflows/sdk.yml
+name: SDK
+on: [push, pull_request]
+
+jobs:
+  steadysdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: euruuuuu/steadysdk@main     # pin a commit SHA for reproducible builds
+        with:
+          working-directory: .            # where .steadysdkrc.yml is (or below it)
+          # require-bump: true            # breaking changes need a new major info.version (default)
+          # fail-on-breaking: false       # fail on any breaking change, whatever the version
+          # check: true                   # fail when the committed SDK is out of date (default)
+          # base: origin/release          # default: the PR's base branch, or the commit before a push
+```
+
+On a pull request, the action compares the spec with the base branch (fetching it if the checkout is
+shallow). On a push, it compares with the commit before the push. It fails the job when the SDK is out of date
+or a breaking change lacks its version bump. The results and the API changelog go to the job summary, and the
+counts are available as the `breaking` and `non-breaking` outputs. A spec that is new in the pull request
+counts as all additions. Until steadysdk is published to npm, the action installs and builds the CLI from its
+own source on every run. This repository runs the action on its Petstore example in
+[its own CI](.github/workflows/ci.yml).
+
 ## Leaving parts of the API out
 
 Internal, admin or legacy endpoints don't have to end up in the SDK:
@@ -289,13 +358,16 @@ built-ins or with each other are resolved deterministically and reported.
 steadysdk init        [-i spec] [-o dir] [--force]
 steadysdk generate    [-c config] [-i spec] [-o dir] [--dry-run] [--check] [--relock] [--force]
                       [--no-validate] [--verbose]
-steadysdk diff        [old] [new] [-c config] [-i spec] [--json] [--fail-on-breaking] [--no-validate]
-steadysdk changelog   [old] [new] [-c config] [-i spec] [--json] [--out file] [--no-validate]
+steadysdk watch       [-c config] [-i spec] [-o dir] [--no-validate] [--verbose]
+steadysdk diff        [old] [new] [-c config] [-i spec] [-b git-rev] [--json] [--fail-on-breaking]
+                      [--require-bump] [--no-validate]
+steadysdk changelog   [old] [new] [-c config] [-i spec] [-b git-rev] [--json] [--out file] [--no-validate]
 steadysdk eject       runtime [-c config] [--out file] [--stdout] [--force]
 global:               [-C, --cwd dir] [--no-color]
 ```
 
-`old` defaults to the spec the SDK was last generated from and `new` to the configured input.
+`old` defaults to the spec the SDK was last generated from, or with `--base` to the configured spec at that
+git revision; `new` defaults to the configured input. Either can be a file, a URL or `<git-rev>:<path>`.
 
 Specs are validated before generation: the OpenAPI schema, plus checks that matter for code generation
 (every `{param}` in a path is declared, operationIds are unique). Errors come with the offending location
@@ -318,8 +390,8 @@ and a hint.
 | A | Spec loading, model, naming engine, name lock, TypeScript generator, `init` / `generate` | ✅ Done |
 | B | Changelog & drift detection: `steadysdk diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
 | C | Maintenance: custom regions in generated files, ignore lists, template overrides (`steadysdk eject`) | ✅ Done |
-| D | `steadysdk watch`, CI gating on breaking changes without a version bump, GitHub Action | Next |
-| E | VS Code extension (generate/diff commands, out-of-sync status bar), npm publish | Planned |
+| D | `steadysdk watch`, CI gating on breaking changes without a version bump, GitHub Action | ✅ Done |
+| E | npm publish, polished `init`, VS Code extension (generate/diff commands, out-of-sync status bar) | Next |
 
 ## Development
 

@@ -1,0 +1,72 @@
+name: steadysdk
+description: Check that a generated TypeScript SDK matches its OpenAPI spec, and require a version bump for breaking API changes.
+branding:
+  icon: package
+  color: green
+
+inputs:
+  working-directory:
+    description: Directory to run in. The steadysdk config is searched from there upwards.
+    default: .
+  config:
+    description: Config file to use instead of the nearest .steadysdkrc.yml.
+    default: ''
+  check:
+    description: Fail when the committed SDK is not exactly what the spec and config produce (`steadysdk generate --check`).
+    default: 'true'
+  base:
+    description: Git revision to compare the spec against. Defaults to the pull request's base branch, or to the commit before a push.
+    default: ''
+  require-bump:
+    description: Fail when there are breaking API changes but info.version is not a new major version (a new minor in 0.x).
+    default: 'true'
+  fail-on-breaking:
+    description: Fail on any breaking API change, whatever the version.
+    default: 'false'
+  summary:
+    description: Write the results and the API changelog to the job summary.
+    default: 'true'
+
+outputs:
+  breaking:
+    description: Number of breaking API changes since the base revision.
+    value: ${{ steps.run.outputs.breaking }}
+  non-breaking:
+    description: Number of non-breaking API changes since the base revision.
+    value: ${{ steps.run.outputs.non-breaking }}
+
+runs:
+  using: composite
+  steps:
+    - id: node
+      name: Check the Node.js version
+      shell: bash
+      run: |
+        if node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' 2> /dev/null; then
+          echo "setup=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "setup=true" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.node.outputs.setup == 'true'
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+    # Until steadysdk is on npm, the action builds the CLI from its own checkout.
+    - name: Build steadysdk
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --no-audit --no-fund && npm run build
+    - id: run
+      name: Run steadysdk
+      shell: bash
+      env:
+        STEADYSDK_CLI: ${{ github.action_path }}/packages/cli/dist/index.js
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_CHECK: ${{ inputs.check }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_REQUIRE_BUMP: ${{ inputs.require-bump }}
+        INPUT_FAIL_ON_BREAKING: ${{ inputs.fail-on-breaking }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/github-action.sh"

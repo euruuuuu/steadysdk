@@ -4,7 +4,7 @@ import { renderChangelog, serializeDiff } from '@steadysdk/core';
 import type { Ui } from '../ui.js';
 import { compareSpecs, type DiffCommandOptions } from './diff.js';
 
-export interface ChangelogCommandOptions extends Pick<DiffCommandOptions, 'config' | 'input' | 'validate' | 'json'> {
+export interface ChangelogCommandOptions extends Pick<DiffCommandOptions, 'config' | 'input' | 'base' | 'validate' | 'json'> {
   out?: string;
 }
 

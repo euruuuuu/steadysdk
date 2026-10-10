@@ -22,3 +22,12 @@ jobs:
       - run: npm test
       # The committed example SDK must match what the generator produces today.
       - run: node packages/cli/dist/index.js generate --check --cwd examples/petstore
+
+  # Runs this repository's GitHub Action (action.yml) against the Petstore example, as a user would.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        with:
+          working-directory: examples/petstore

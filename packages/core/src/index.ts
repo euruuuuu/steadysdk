@@ -24,6 +24,8 @@ export { generate, type GenerateOptions, type GenerateResult } from './generate.
 export { diffModels } from './diff/diff.js';
 export { renderChangelog, serializeDiff, diffTitle, changeSubject } from './diff/render.js';
 export { loadSpecSnapshot } from './diff/baseline.js';
+export { checkVersionBump, type VersionCheck } from './diff/version.js';
+export { parseRevisionArgument } from './spec/git.js';
 export { DIFF_FORMAT_VERSION, type ApiDiff, type Change, type ChangeKind, type ChangeScope } from './diff/types.js';
 export { generateTypeScript, type GeneratorOutput, type TypeScriptGeneratorInput } from './generators/typescript/index.js';
 export { ejectTemplate, builtinRuntime, loadRuntime, TEMPLATE_NAMES, type TemplateName } from './generators/typescript/templates.js';

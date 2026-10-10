@@ -5,6 +5,7 @@ import { changelogCommand, type ChangelogCommandOptions } from './commands/chang
 import { diffCommand, type DiffCommandOptions } from './commands/diff.js';
 import { ejectCommand, type EjectCommandOptions } from './commands/eject.js';
 import { generateCommand, type GenerateCommandOptions } from './commands/generate.js';
+import { watchCommand, type WatchCommandOptions } from './commands/watch.js';
 import { initCommand, type InitCommandOptions } from './commands/init.js';
 import { defaultIo, Ui, type Io } from './ui.js';
 
@@ -67,18 +68,30 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .option('--verbose', 'show notes and unchanged files')
     .action(action<GenerateCommandOptions>(generateCommand));
 
+  program
+    .command('watch')
+    .description('generate, then regenerate whenever the spec, a file it references or the config changes')
+    .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
+    .option('-i, --input <spec>', 'OpenAPI document, overriding the config')
+    .option('-o, --output <dir>', 'output directory, overriding the config')
+    .option('--no-validate', 'skip OpenAPI validation')
+    .option('--verbose', 'show notes and unchanged files')
+    .action(action<WatchCommandOptions>(watchCommand));
+
   const specArguments = (command: Command): Command =>
     command
-      .argument('[old]', 'spec to compare from (default: the spec the SDK was last generated from)')
+      .argument('[old]', 'spec to compare from (default: the spec the SDK was last generated from); <git-rev>:<path> reads it from git')
       .argument('[new]', 'spec to compare to (default: the configured input)')
       .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
       .option('-i, --input <spec>', 'use this spec instead of the configured input as [new]')
+      .option('-b, --base <git-rev>', 'compare against the configured spec as it is at this git revision, e.g. origin/main')
       .option('--no-validate', 'skip OpenAPI validation')
       .option('--json', 'print the changes as JSON');
 
   specArguments(program.command('diff'))
     .description('list API changes, marking breaking ones (default: since the last generation)')
     .option('--fail-on-breaking', 'exit 1 if any change is breaking (for CI)')
+    .option('--require-bump', 'exit 1 if there are breaking changes but info.version is not a new major version (for CI)')
     .action(action<DiffCommandOptions>(diffCommand));
 
   specArguments(program.command('changelog'))

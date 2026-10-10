@@ -13,7 +13,11 @@ export type SteadySdkErrorCode =
   | 'OUTPUT_CONFLICT'
   | 'TEMPLATE_NOT_FOUND'
   | 'TEMPLATE_INVALID'
-  | 'FILE_EXISTS';
+  | 'FILE_EXISTS'
+  | 'GIT_FAILED'
+  | 'GIT_REVISION_NOT_FOUND'
+  | 'WATCH_UNSUPPORTED'
+  | 'ARGUMENTS_INVALID';
 
 export interface SteadySdkErrorOptions {
   hint?: string;

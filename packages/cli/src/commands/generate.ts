@@ -1,4 +1,14 @@
-import { describeConflict, generate, hasChanges, loadConfig, MANIFEST_FILE, type FileAction, type OutputPlan } from '@steadysdk/core';
+import {
+  describeConflict,
+  generate,
+  hasChanges,
+  loadConfig,
+  MANIFEST_FILE,
+  type FileAction,
+  type GenerateResult,
+  type OutputPlan,
+  type ResolvedConfig,
+} from '@steadysdk/core';
 import { printChanges } from '../changes.js';
 import type { Ui } from '../ui.js';
 
@@ -18,7 +28,22 @@ const SYMBOLS: Record<FileAction, string> = { create: '+', update: '~', delete: 
 
 export async function generateCommand(ui: Ui, options: GenerateCommandOptions): Promise<number> {
   const started = performance.now();
-  const config = await loadConfig({
+  const config = await loadGenerateConfig(ui, options);
+  if (config.configPath) ui.line(ui.c.dim(`Using ${ui.rel(config.configPath)}`));
+
+  const dryRun = options.dryRun === true || options.check === true;
+  const result = await generate({ config, dryRun, relock: options.relock === true, force: options.force === true });
+  if (options.check) {
+    printSummary(ui, result, options.verbose === true);
+    return reportCheck(ui, result.plan);
+  }
+  printGeneration(ui, result, { ...options, dryRun }, started);
+  return 0;
+}
+
+/** The config with `--config`, `--input`, `--output` and `--no-validate` applied. */
+export function loadGenerateConfig(ui: Ui, options: Pick<GenerateCommandOptions, 'config' | 'input' | 'output' | 'validate'>): Promise<ResolvedConfig> {
+  return loadConfig({
     cwd: ui.io.cwd,
     configPath: options.config,
     overrides: {
@@ -27,31 +52,20 @@ export async function generateCommand(ui: Ui, options: GenerateCommandOptions): 
       ...(options.validate === false && { validate: false }),
     },
   });
-  if (config.configPath) ui.line(ui.c.dim(`Using ${ui.rel(config.configPath)}`));
+}
 
-  const dryRun = options.dryRun === true || options.check === true;
-  const result = await generate({ config, dryRun, relock: options.relock === true, force: options.force === true });
-  const { model, spec, plan } = result;
-
-  ui.success(
-    `Loaded ${ui.c.bold(`${model.title} ${model.version}`)} (OpenAPI ${spec.openapiVersion}): ` +
-      `${count(model.operations.length, 'operation')}, ${count(model.schemas.length, 'schema')}`,
-  );
-  ui.diagnostics(result.diagnostics, options.verbose === true);
-  if (result.changes && result.changes.changes.length > 0) {
-    const { from, to } = result.changes;
-    printChanges(ui, result.changes, {
-      heading: `API changes since the last generation${from.version === to.version ? '' : ` (${from.version} → ${to.version})`}`,
-      limit: options.verbose ? undefined : 10,
-      moreHint: 'run with --verbose to list them all',
-    });
-  }
-
-  if (options.check) return reportCheck(ui, plan);
-
+/** What was loaded, diagnostics, API changes, the files touched, and the outcome. */
+export function printGeneration(
+  ui: Ui,
+  result: GenerateResult,
+  options: { dryRun: boolean; force?: boolean | undefined; verbose?: boolean | undefined },
+  started: number,
+): void {
+  const { plan } = result;
+  printSummary(ui, result, options.verbose === true);
   printPlan(ui, plan, options.verbose === true);
   const elapsed = Math.round(performance.now() - started);
-  if (dryRun) {
+  if (options.dryRun) {
     ui.info(`Dry run: nothing was written ${ui.c.dim(`(${elapsed} ms)`)}`);
     if (plan.conflicts.length > 0 && !options.force) {
       ui.warn('A real run would stop here: these files were changed outside steadysdk (use --force to overwrite):');
@@ -60,7 +74,23 @@ export async function generateCommand(ui: Ui, options: GenerateCommandOptions): 
   } else {
     ui.success(`SDK written to ${ui.c.bold(ui.rel(plan.outputDir))} ${ui.c.dim(`(${elapsed} ms)`)}`);
   }
-  return 0;
+}
+
+function printSummary(ui: Ui, result: GenerateResult, verbose: boolean): void {
+  const { model, spec } = result;
+  ui.success(
+    `Loaded ${ui.c.bold(`${model.title} ${model.version}`)} (OpenAPI ${spec.openapiVersion}): ` +
+      `${count(model.operations.length, 'operation')}, ${count(model.schemas.length, 'schema')}`,
+  );
+  ui.diagnostics(result.diagnostics, verbose);
+  if (result.changes && result.changes.changes.length > 0) {
+    const { from, to } = result.changes;
+    printChanges(ui, result.changes, {
+      heading: `API changes since the last generation${from.version === to.version ? '' : ` (${from.version} → ${to.version})`}`,
+      limit: verbose ? undefined : 10,
+      moreHint: 'run with --verbose to list them all',
+    });
+  }
 }
 
 function printPlan(ui: Ui, plan: OutputPlan, verbose: boolean): void {

@@ -1,9 +1,12 @@
+import { execFile } from 'node:child_process';
 import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { run } from '../src/cli.js';
 
+const exec = promisify(execFile);
 const PETSTORE_SPEC = path.resolve(import.meta.dirname, '../../../examples/petstore/openapi.yaml');
 const PETSTORE_NEXT = path.resolve(import.meta.dirname, '../../../examples/petstore/next');
 
@@ -264,6 +267,93 @@ describe('steadysdk CLI', () => {
       const unknown = await steadysdk(dir, 'eject', 'models');
       expect(unknown.code).toBe(1);
       expect(unknown.stderr).toContain("value 'models' is invalid for argument 'template'. Allowed choices are runtime.");
+    });
+  });
+
+  describe('diff against git revisions', () => {
+    const git = (cwd: string, ...args: string[]) =>
+      exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd });
+
+    async function repository(): Promise<string> {
+      const dir = await project();
+      await git(dir, 'init', '-q', '-b', 'main');
+      await git(dir, 'add', '-A');
+      await git(dir, 'commit', '-q', '-m', 'spec');
+      await editSpec(dir, 'enum: [available, pending, sold]', 'enum: [available, pending]');
+      return dir;
+    }
+
+    it('compares the configured spec with its version at --base, and gates with --require-bump', async () => {
+      const dir = await repository();
+      const result = await steadysdk(dir, 'diff', '--base', 'main', '--require-bump');
+      expect(result.code).toBe(1);
+      expect(result.stdout).toContain('Comparing main:openapi.yaml → openapi.yaml');
+      expect(result.stdout).toContain('! schema PetStatus: Enum value `sold` was removed.');
+      expect(result.stderr).toContain('1 breaking change, but info.version is still 1.0.0. They need a new major version: 2.0.0 or later.');
+
+      await editSpec(dir, 'version: 1.0.0', 'version: 2.0.0');
+      const bumped = await steadysdk(dir, 'diff', '--base', 'main', '--require-bump');
+      expect(bumped.code).toBe(0);
+      expect(bumped.stdout).toContain('1 breaking change; 1.0.0 → 2.0.0 is a new major version.');
+    });
+
+    it('reads <revision>:<path> arguments from git', async () => {
+      const dir = await repository();
+      const result = await steadysdk(dir, 'changelog', 'main:openapi.yaml', 'openapi.yaml');
+      expect(result.stdout).toContain('- **Schema `PetStatus`** (used by');
+      const both = await steadysdk(dir, 'diff', 'main:openapi.yaml', '--base', 'main');
+      expect(both.code).toBe(1);
+      expect(both.stderr).toContain('Pass either an [old] spec or --base, not both');
+    });
+  });
+
+  describe('watch', () => {
+    async function waitFor(condition: () => boolean, what: string): Promise<void> {
+      for (const started = Date.now(); !condition(); await new Promise((resolve) => setTimeout(resolve, 25))) {
+        if (Date.now() - started > 10_000) throw new Error(`Timed out waiting for ${what}`);
+      }
+    }
+
+    it('regenerates on every save, keeps going after a broken one, and stops when aborted', async () => {
+      const dir = await project();
+      const controller = new AbortController();
+      let stdout = '';
+      let stderr = '';
+      const exited = run(['watch'], {
+        cwd: dir,
+        color: false,
+        signal: controller.signal,
+        stdout: (text) => {
+          stdout += text;
+        },
+        stderr: (text) => {
+          stderr += text;
+        },
+      });
+      await waitFor(() => stdout.includes('Watching 2 files for changes'), 'the first generation');
+      expect(stdout).toContain('SDK written to sdk');
+
+      await editSpec(dir, 'operationId: healthCheck', 'operationId: health');
+      await waitFor(() => stdout.includes('operationId changed from `healthCheck` to `health`'), 'the regeneration');
+      expect(stdout).toMatch(/\[\d\d:\d\d:\d\d\] openapi\.yaml changed/);
+
+      const spec = path.join(dir, 'openapi.yaml');
+      const valid = await readFile(spec, 'utf8');
+      await writeFile(spec, 'openapi: 3.0.3\ninfo: [broken\n');
+      await waitFor(() => stderr.includes('Could not read OpenAPI spec'), 'the parse error');
+      await writeFile(spec, valid.replace('summary: List all pets', 'summary: List pets'));
+      await waitFor(() => stdout.split('SDK written to sdk').length === 4, 'the recovery');
+
+      controller.abort();
+      expect(await exited).toBe(0);
+      expect(stdout).toContain('Stopped watching.');
+      expect(await readFile(path.join(dir, 'sdk/generated/api/pets.ts'), 'utf8')).toContain('List pets');
+    });
+
+    it('refuses specs it cannot watch', async () => {
+      const result = await steadysdk(await tempDir(), 'watch', '-i', 'https://example.com/openapi.yaml');
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('Cannot watch https://example.com/openapi.yaml: it is a URL');
     });
   });
 });

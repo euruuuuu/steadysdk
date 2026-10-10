@@ -8,6 +8,8 @@ export interface Io {
   cwd: string;
   /** Colors are on for TTYs unless NO_COLOR is set; tests pass false. */
   color: boolean;
+  /** Stops long-running commands (`watch`). Without it they stop on Ctrl+C. */
+  signal?: AbortSignal | undefined;
 }
 
 export function defaultIo(): Io {
