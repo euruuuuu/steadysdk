@@ -2,6 +2,11 @@
 
 **Generate typed API clients from OpenAPI, and keep them maintainable as the API evolves.**
 
+[![CI](https://github.com/euruuuuu/steadysdk/actions/workflows/ci.yml/badge.svg)](https://github.com/euruuuuu/steadysdk/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933?logo=node.js&logoColor=white)
+![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
+
 Most OpenAPI generators are "generate once and forget": re-running them overwrites everything, wipes out
 hand-written helpers, and silently renames methods when the spec shifts. steadysdk is built for the second,
 tenth and hundredth generation.
@@ -19,19 +24,34 @@ tenth and hundredth generation.
 | You are editing the spec | Re-run the generator by hand | `steadysdk watch` regenerates on every save |
 | CI | — | A GitHub Action fails when the SDK is stale, or on breaking changes without a major version bump |
 
-> **Status:** early development, not yet on npm. Generation, naming rules, safe regeneration, the name lock,
-> custom regions, ignore lists, template overrides, the API changelog with breaking-change detection, watch
-> mode and CI gating (with a GitHub Action) work today. The npm release and a VS Code extension are next (see
-> [Roadmap](#roadmap)).
+> **Status:** early development (0.1.0). Everything in this README works today, but steadysdk is not on npm
+> yet: [run it from source](#try-it). The npm release and a VS Code extension are next ([Roadmap](#roadmap)).
 
-## Quick start
+**Contents:** [Try it](#try-it) · [What gets generated](#what-gets-generated) ·
+[Maintenance model](#maintenance-model) · [API changes](#api-changes-and-breaking-changes) ·
+[Watch mode](#watch-mode) · [CI](#ci-keep-the-sdk-and-the-api-honest) ·
+[Customizing](#customizing-the-generated-code) · [Naming](#naming-conventions) ·
+[How it works](#how-it-works) · [CLI](#cli)
+
+## Try it
+
+Until the npm release, run it from a clone:
 
 ```bash
-npm install --save-dev steadysdk     # not yet published; see "Development" to run from source
+git clone https://github.com/euruuuuu/steadysdk.git && cd steadysdk
+npm install && npm run build
 
-npx steadysdk init                   # writes .steadysdkrc.yml, detecting openapi.yaml/json
-npx steadysdk generate               # writes ./sdk
+# What would version 1.1.0 of the Petstore API break for the example SDK?
+npm run steadysdk -- diff --cwd examples/petstore -i next/openapi.yaml
+
+# Point it at your own spec
+alias steadysdk="node $PWD/packages/cli/dist/index.js"
+cd ~/my-api && steadysdk init && steadysdk generate
 ```
+
+Once published, it will be `npm install --save-dev steadysdk`, then `npx steadysdk init` (writes
+`.steadysdkrc.yml`, detecting your `openapi.yaml` or `.json`) and `npx steadysdk generate` (writes `./sdk`).
+Using the generated client:
 
 ```ts
 import { PetstoreClient } from './sdk/index.js';
@@ -59,7 +79,7 @@ sdk/
 │   └── index.ts
 ├── client.ts             ← created once, then yours: class PetstoreClient extends GeneratedClient {}
 ├── index.ts              ← created once, then yours
-└── .steadysdk/              ← bookkeeping, commit it
+└── .steadysdk/           ← bookkeeping, commit it
     ├── manifest.json     hash of every generated file (detects hand edits and stale files)
     ├── names.lock.json   every assigned name (keeps names stable)
     └── spec.json         the spec this SDK was generated from (the baseline for `steadysdk diff`)
@@ -352,6 +372,48 @@ Case styles (`camel`, `pascal`, `snake`, `constant`, `preserve`), prefixes/suffi
 `none`) and helper-type templates (`{Operation}Params`, ...) are all configurable. Names that clash with
 built-ins or with each other are resolved deterministically and reported.
 
+## How it works
+
+```mermaid
+flowchart LR
+  spec["OpenAPI 3.0 / 3.1<br/>file, URL or git revision"] --> load["Load and validate<br/>(bundle $refs)"]
+  load --> ir["Normalized model"]
+  ir --> ignore["Ignore list"]
+  ignore --> names["Naming rules<br/>and name lock"]
+  names --> gen["TypeScript generator"]
+  gen --> plan["Output planner<br/>(manifest, custom regions, conflicts)"]
+  plan --> sdk["sdk/"]
+  ignore --> diff["Diff engine<br/>(breaking or not)"]
+  base["Previous spec<br/>(.steadysdk/spec.json or git)"] --> diff
+  diff --> report["Terminal, Markdown, JSON,<br/>CI gate"]
+```
+
+- **One model, two consumers.** The spec is normalized once into an intermediate model that hides OpenAPI
+  3.0 vs 3.1 differences (`nullable` vs type arrays, `const`, `$ref` chains). The generator and the diff engine
+  both work on that model, so what gets generated and what the changelog reports always agree.
+- **Naming is its own step.** Rules turn operations and schemas into names; a second pass resolves collisions
+  and replays the lock file, so names that already shipped win over new ones.
+- **Files are planned before anything is written.** The generator returns files in memory. The planner compares
+  them with the disk and the manifest, carries custom-region code over, and refuses to touch anything it didn't
+  write. Normal runs, `--dry-run`, `--check` and `watch` all act on the same plan.
+- **Breaking-change rules know which way data flows.** Each schema rule declares the direction it breaks in
+  (requests may only get looser, responses only stricter). Component schemas take their direction from how
+  operations use them, so one rule set covers parameters, bodies, responses and shared models.
+
+Engineering notes:
+
+- TypeScript 7 and ESM, as npm workspaces: [`packages/core`](packages/core) is the engine and works as a
+  library; [`packages/cli`](packages/cli) is the `steadysdk` command on top of it.
+- Generated output is deterministic (no timestamps, stable ordering), so regenerating produces small, reviewable
+  diffs, and `--check` can compare byte for byte.
+- The test suite (Vitest) covers each module, plus:
+  - golden snapshots of the example SDK, its changelog and the documented config
+  - type-checks of fresh and committed output under the strictest compiler options (`strict`,
+    `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `isolatedDeclarations`, `erasableSyntaxOnly`)
+  - the runtime against a live local HTTP server
+  - the CLI run in-process, and watch mode on a real file system
+  - the GitHub Action's script against real git repositories
+
 ## CLI
 
 ```
@@ -398,7 +460,7 @@ and a hint.
 ```bash
 npm install
 npm run build          # tsc -b (TypeScript 7)
-npm test               # vitest: unit, golden-file, type-check and live-HTTP tests
+npm test               # vitest: unit, golden-file, type-check, live-HTTP and git-based tests
 npm run typecheck      # sources, tests and the runtime template
 npm run examples       # regenerate examples/petstore/sdk and next/CHANGELOG.md after generator changes
 ```
@@ -408,4 +470,4 @@ planning, diff); [`packages/cli`](packages/cli) is the `steadysdk` command.
 
 ## License
 
-MIT
+[MIT](LICENSE)
