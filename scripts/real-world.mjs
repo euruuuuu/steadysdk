@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates SDKs for large public API specs and type-checks them under the strictest compiler settings.
-// Specs are pinned to commits, so results only change when steadysdk does. Run after `npm run build`:
+// Specs are pinned to commits, so results only change when apisteady does. Run after `npm run build`:
 //
 //   node scripts/real-world.mjs [name...]        (all specs when no names are given)
 //

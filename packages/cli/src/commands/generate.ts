@@ -8,7 +8,7 @@ import {
   type GenerateResult,
   type OutputPlan,
   type ResolvedConfig,
-} from '@steadysdk/core';
+} from '@apisteady/core';
 import { printChanges } from '../changes.js';
 import type { Ui } from '../ui.js';
 
@@ -68,7 +68,7 @@ export function printGeneration(
   if (options.dryRun) {
     ui.info(`Dry run: nothing was written ${ui.c.dim(`(${elapsed} ms)`)}`);
     if (plan.conflicts.length > 0 && !options.force) {
-      ui.warn('A real run would stop here: these files were changed outside steadysdk (use --force to overwrite):');
+      ui.warn('A real run would stop here: these files were changed outside apisteady (use --force to overwrite):');
       for (const conflict of plan.conflicts) ui.line(`    ${describeConflict(conflict)}`);
     }
   } else {
@@ -115,13 +115,13 @@ function printPlan(ui: Ui, plan: OutputPlan, verbose: boolean): void {
 
 /** `--check`: exit 1 when the SDK on disk is not what the current spec and config would produce. */
 function reportCheck(ui: Ui, plan: OutputPlan): number {
-  // The manifest also records the steadysdk version; upgrading steadysdk alone should not fail CI.
+  // The manifest also records the apisteady version; upgrading apisteady alone should not fail CI.
   const outdated = { ...plan, changes: plan.changes.filter((change) => change.path !== MANIFEST_FILE) };
   if (!hasChanges(outdated) && plan.conflicts.length === 0) {
     ui.success('SDK is up to date');
     return 0;
   }
-  ui.fail('SDK is out of date with the spec or config. Run `steadysdk generate` and commit the result.');
+  ui.fail('SDK is out of date with the spec or config. Run `apisteady generate` and commit the result.');
   for (const change of outdated.changes) {
     if (change.action === 'create' || change.action === 'update' || change.action === 'delete') {
       ui.io.stderr(`  ${SYMBOLS[change.action]} ${change.path}\n`);

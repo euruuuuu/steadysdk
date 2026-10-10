@@ -15,14 +15,14 @@ const PETSTORE_SPEC = path.join(REPO_ROOT, 'examples/petstore/openapi.yaml');
 beforeAll(() => exec(path.join(REPO_ROOT, 'node_modules/.bin/tsc'), ['-b'], { cwd: REPO_ROOT }), 120_000);
 
 async function tempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'steadysdk-action-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'apisteady-action-'));
   onTestFinished(() => rm(dir, { recursive: true, force: true }));
   return dir;
 }
 
 const git = (cwd: string, ...args: string[]) =>
   exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd });
-const steadysdk = (cwd: string, ...args: string[]) => exec('node', [CLI, ...args], { cwd });
+const apisteady = (cwd: string, ...args: string[]) => exec('node', [CLI, ...args], { cwd });
 
 /** A repository with a generated Petstore SDK committed on main, pushed to a bare `origin`. */
 async function repository(): Promise<string> {
@@ -30,8 +30,8 @@ async function repository(): Promise<string> {
   const dir = path.join(root, 'work');
   await exec('git', ['init', '-q', '-b', 'main', dir]);
   await copyFile(PETSTORE_SPEC, path.join(dir, 'openapi.yaml'));
-  await steadysdk(dir, 'init');
-  await steadysdk(dir, 'generate');
+  await apisteady(dir, 'init');
+  await apisteady(dir, 'generate');
   await git(dir, 'add', '-A');
   await git(dir, 'commit', '-q', '-m', 'Add the SDK');
   await exec('git', ['clone', '-q', '--bare', dir, path.join(root, 'origin.git')]);
@@ -55,7 +55,7 @@ async function action(dir: string, env: Record<string, string> = {}) {
     cwd: dir,
     env: {
       ...process.env,
-      STEADYSDK_CLI: CLI,
+      APISTEADY_CLI: CLI,
       GITHUB_EVENT_NAME: 'pull_request',
       GITHUB_BASE_REF: 'main',
       GITHUB_STEP_SUMMARY: summaryFile,
@@ -84,7 +84,7 @@ describe('GitHub Action script', () => {
   it('fails on breaking changes without a major version bump, and passes with one', async () => {
     const dir = await repository();
     await editSpec(dir, ...BREAKING);
-    await steadysdk(dir, 'generate');
+    await apisteady(dir, 'generate');
     const result = await action(dir);
     expect(result.code).toBe(1);
     expect(result.summary).toContain(
@@ -95,7 +95,7 @@ describe('GitHub Action script', () => {
     expect(result.outputs).toBe('breaking=1\nnon-breaking=0\n');
 
     await editSpec(dir, 'version: 1.0.0', 'version: 2.0.0');
-    await steadysdk(dir, 'generate');
+    await apisteady(dir, 'generate');
     const bumped = await action(dir);
     expect(bumped.code).toBe(0);
     expect(bumped.summary).toContain('## Swagger Petstore 1.0.0 → 2.0.0');
@@ -106,14 +106,14 @@ describe('GitHub Action script', () => {
     await editSpec(dir, 'summary: List all pets', 'summary: List pets');
     const result = await action(dir, { INPUT_REQUIRE_BUMP: 'false' });
     expect(result.code).toBe(1);
-    expect(result.summary).toContain('- ❌ The generated SDK is out of date: run `steadysdk generate` and commit the result.');
+    expect(result.summary).toContain('- ❌ The generated SDK is out of date: run `apisteady generate` and commit the result.');
   });
 
   it('can gate on any breaking change, and skips the comparison without a base', async () => {
     const dir = await repository();
     await editSpec(dir, ...BREAKING);
     await editSpec(dir, 'version: 1.0.0', 'version: 2.0.0');
-    await steadysdk(dir, 'generate');
+    await apisteady(dir, 'generate');
     expect((await action(dir, { INPUT_FAIL_ON_BREAKING: 'true' })).code).toBe(1);
 
     const manual = await action(dir, { GITHUB_EVENT_NAME: 'workflow_dispatch' });
@@ -125,7 +125,7 @@ describe('GitHub Action script', () => {
     const dir = await repository();
     const before = (await git(dir, 'rev-parse', 'HEAD')).stdout.trim();
     await editSpec(dir, 'operationId: healthCheck', 'operationId: health');
-    await steadysdk(dir, 'generate');
+    await apisteady(dir, 'generate');
     await git(dir, 'commit', '-q', '-am', 'Rename an operationId');
     const result = await action(dir, { GITHUB_EVENT_NAME: 'push', GITHUB_EVENT_BEFORE: before });
     expect(result.code).toBe(0);

@@ -5,7 +5,7 @@ import { Diagnostics, type Diagnostic } from './diagnostics.js';
 import { loadSpecSnapshot } from './diff/baseline.js';
 import { diffModels } from './diff/diff.js';
 import type { ApiDiff } from './diff/types.js';
-import { SteadySdkError } from './errors.js';
+import { ApiSteadyError } from './errors.js';
 import { generateTypeScript } from './generators/typescript/index.js';
 import { loadRuntime } from './generators/typescript/templates.js';
 import { buildModel } from './ir/build.js';
@@ -25,7 +25,7 @@ import {
 import { applyPlan, describeConflict, planOutput, type OutputPlan, type PlanFile } from './output/plan.js';
 import { loadSpec, type LoadedSpec } from './spec/load.js';
 import { sha256 } from './util/hash.js';
-import { STEADYSDK_VERSION } from './version.js';
+import { APISTEADY_VERSION } from './version.js';
 
 export interface GenerateOptions {
   config: ResolvedConfig;
@@ -83,7 +83,7 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
   const owned = output.files.filter((file) => file.ownership === 'generated');
   const manifest: Manifest = {
     version: MANIFEST_VERSION,
-    generator: { name: 'steadysdk', version: STEADYSDK_VERSION, target: config.target },
+    generator: { name: 'apisteady', version: APISTEADY_VERSION, target: config.target },
     spec: { title: model.title, version: model.version, openapi: spec.openapiVersion, hash: spec.hash },
     files: Object.fromEntries(owned.map((file) => [file.path, sha256(file.content)])),
   };
@@ -100,9 +100,9 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
 
   if (!options.dryRun) {
     if (plan.conflicts.length > 0 && !options.force) {
-      throw new SteadySdkError('OUTPUT_CONFLICT', 'Refusing to overwrite files that steadysdk did not write', {
+      throw new ApiSteadyError('OUTPUT_CONFLICT', 'Refusing to overwrite files that apisteady did not write', {
         details: plan.conflicts.map(describeConflict),
-        hint: 'Keep custom code in a `// <steadysdk:custom>` region or outside generated/ (e.g. in client.ts), or re-run with --force to overwrite.',
+        hint: 'Keep custom code in a `// <apisteady:custom>` region or outside generated/ (e.g. in client.ts), or re-run with --force to overwrite.',
       });
     }
     await applyPlan(plan);
@@ -125,7 +125,7 @@ async function readBaseline(config: ResolvedConfig, diagnostics: Diagnostics): P
 function assertSafeOutputDir(outputDir: string): void {
   const resolved = path.resolve(outputDir);
   if (resolved === path.parse(resolved).root || resolved === path.resolve(homedir())) {
-    throw new SteadySdkError('OUTPUT_UNSAFE', `Refusing to generate into ${resolved}`, {
+    throw new ApiSteadyError('OUTPUT_UNSAFE', `Refusing to generate into ${resolved}`, {
       hint: 'Point `output` at a dedicated directory such as ./sdk.',
     });
   }

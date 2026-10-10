@@ -1,5 +1,5 @@
 {
-  "name": "steadysdk",
+  "name": "apisteady",
   "version": "0.1.0",
   "description": "Generate and maintain typed API client SDKs from OpenAPI specs",
   "keywords": [
@@ -24,7 +24,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "steadysdk": "./dist/index.js"
+    "apisteady": "./dist/index.js"
   },
   "exports": {
     "./package.json": "./package.json"
@@ -41,7 +41,7 @@
     "prepack": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -b --force"
   },
   "dependencies": {
-    "@steadysdk/core": "^0.1.0",
+    "@apisteady/core": "^0.1.0",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1",
     "yaml": "^2.9.1"

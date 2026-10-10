@@ -1,5 +1,5 @@
 /** Stable, machine-readable error codes. The CLI maps these to exit codes and hints. */
-export type SteadySdkErrorCode =
+export type ApiSteadyErrorCode =
   | 'CONFIG_NOT_FOUND'
   | 'CONFIG_INVALID'
   | 'CONFIG_EXISTS'
@@ -19,27 +19,27 @@ export type SteadySdkErrorCode =
   | 'WATCH_UNSUPPORTED'
   | 'ARGUMENTS_INVALID';
 
-export interface SteadySdkErrorOptions {
+export interface ApiSteadyErrorOptions {
   hint?: string;
   details?: readonly string[];
   cause?: unknown;
 }
 
 /** An expected, user-facing failure (bad config, invalid spec, ...). Anything else is a bug. */
-export class SteadySdkError extends Error {
-  readonly code: SteadySdkErrorCode;
+export class ApiSteadyError extends Error {
+  readonly code: ApiSteadyErrorCode;
   readonly hint: string | undefined;
   readonly details: readonly string[];
 
-  constructor(code: SteadySdkErrorCode, message: string, options: SteadySdkErrorOptions = {}) {
+  constructor(code: ApiSteadyErrorCode, message: string, options: ApiSteadyErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
-    this.name = 'SteadySdkError';
+    this.name = 'ApiSteadyError';
     this.code = code;
     this.hint = options.hint;
     this.details = options.details ?? [];
   }
 }
 
-export function isSteadySdkError(value: unknown): value is SteadySdkError {
-  return value instanceof SteadySdkError;
+export function isApiSteadyError(value: unknown): value is ApiSteadyError {
+  return value instanceof ApiSteadyError;
 }

@@ -1,4 +1,4 @@
-# steadysdk
+# apisteady
 
 **Generate typed API clients from OpenAPI, and keep them maintainable as the API evolves.**
 
@@ -8,20 +8,20 @@
 ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
 
 Most OpenAPI generators are "generate once and forget": re-running them overwrites everything, wipes out
-hand-written helpers, and silently renames methods when the spec shifts. steadysdk is built for the second,
+hand-written helpers, and silently renames methods when the spec shifts. apisteady is built for the second,
 tenth and hundredth generation.
 
-| Situation | Typical generator | steadysdk |
+| Situation | Typical generator | apisteady |
 | --- | --- | --- |
 | First generation | Works | Works |
 | API adds an endpoint | Rewrites everything | Adds the new method; every other file is untouched |
 | You wrote a custom helper | Gets deleted | Lives in your own file or a custom region; kept on every run |
 | Someone hand-edits generated code | Silently overwritten | Detected; regeneration stops and tells you |
 | An `operationId` is renamed upstream | Your method is renamed (breaking) | Name pinned by the lock file until you opt in |
-| The API changes | You diff the YAML by hand | `steadysdk diff` lists every change and marks the breaking ones |
-| Release notes | Written by hand | `steadysdk changelog` writes them as Markdown or JSON |
+| The API changes | You diff the YAML by hand | `apisteady diff` lists every change and marks the breaking ones |
+| Release notes | Written by hand | `apisteady changelog` writes them as Markdown or JSON |
 | Naming conventions | Generator's choice, drifts | Your rules, in config, applied every time |
-| You are editing the spec | Re-run the generator by hand | `steadysdk watch` regenerates on every save |
+| You are editing the spec | Re-run the generator by hand | `apisteady watch` regenerates on every save |
 | CI | — | A GitHub Action fails when the SDK is stale, or on breaking changes without a major version bump |
 
 > **Status:** 0.1.0, early development. Everything in this README works today; the npm release is being
@@ -38,19 +38,19 @@ tenth and hundredth generation.
 Until the npm release, run it from a clone:
 
 ```bash
-git clone https://github.com/euruuuuu/steadysdk.git && cd steadysdk
+git clone https://github.com/euruuuuu/steadysdk.git && cd apisteady
 npm install && npm run build
 
 # What would version 1.1.0 of the Petstore API break for the example SDK?
-npm run steadysdk -- diff --cwd examples/petstore -i next/openapi.yaml
+npm run apisteady -- diff --cwd examples/petstore -i next/openapi.yaml
 
 # Point it at your own spec
-alias steadysdk="node $PWD/packages/cli/dist/index.js"
-cd ~/my-api && steadysdk init && steadysdk generate
+alias apisteady="node $PWD/packages/cli/dist/index.js"
+cd ~/my-api && apisteady init && apisteady generate
 ```
 
-Once published, it will be `npm install --save-dev steadysdk`, then `npx steadysdk init` (writes
-`.steadysdkrc.yml`, detecting your `openapi.yaml` or `.json`) and `npx steadysdk generate` (writes `./sdk`).
+Once published, it will be `npm install --save-dev apisteady`, then `npx apisteady init` (writes
+`.apisteadyrc.yml`, detecting your `openapi.yaml` or `.json`) and `npx apisteady generate` (writes `./sdk`).
 Using the generated client:
 
 ```ts
@@ -90,7 +90,7 @@ that, diffing GitHub's 3.0 description against its 3.1 one reports only real dif
 
 ```
 sdk/
-├── generated/            ← owned by steadysdk, rewritten on every run. Edit only inside custom regions.
+├── generated/            ← owned by apisteady, rewritten on every run. Edit only inside custom regions.
 │   ├── runtime.ts        fetch wrapper: auth, query/path/header serialization, errors, timeouts, hooks
 │   ├── models.ts         one type per components.schemas entry
 │   ├── api/pets.ts       one class per tag (or path segment): PetsApi with listPets(), createPet(), ...
@@ -99,10 +99,10 @@ sdk/
 │   └── index.ts
 ├── client.ts             ← created once, then yours: class PetstoreClient extends GeneratedClient {}
 ├── index.ts              ← created once, then yours
-└── .steadysdk/           ← bookkeeping, commit it
+└── .apisteady/           ← bookkeeping, commit it
     ├── manifest.json     hash of every generated file (detects hand edits and stale files)
     ├── names.lock.json   every assigned name (keeps names stable)
-    └── spec.json         the spec this SDK was generated from (the baseline for `steadysdk diff`)
+    └── spec.json         the spec this SDK was generated from (the baseline for `apisteady diff`)
 ```
 
 Method signatures follow one rule: `method(params?, body?, options?)`, where `params` holds path, query, header
@@ -135,12 +135,12 @@ into every new version of the file:
 export class PetsApi {
   // ...generated methods...
 
-  // <steadysdk:custom members>
+  // <apisteady:custom members>
   async findAvailablePet(name: string, options?: RequestOptions): Promise<Pet | undefined> {
     const pets = await this.listPets({ status: ['available'] }, options);
     return pets.find((pet) => pet.name === name);
   }
-  // </steadysdk:custom>
+  // </apisteady:custom>
 }
 ```
 
@@ -150,30 +150,30 @@ spec, `generate` stops instead of dropping the code. It also stops if the marker
 `typescript.customRegions: false` to generate files without regions.
 
 **Hand edits to generated code are detected, never silently lost.** The manifest records a hash of each file
-steadysdk wrote, with custom regions left out. If a generated file changed outside its regions since then,
-`steadysdk generate` stops and lists it. Move the change into a region or out of `generated/`, or pass `--force` to
+apisteady wrote, with custom regions left out. If a generated file changed outside its regions since then,
+`apisteady generate` stops and lists it. Move the change into a region or out of `generated/`, or pass `--force` to
 overwrite it. Files that are no longer generated (say, a removed tag) are deleted, unless they were edited or
 hold region code, in which case they are kept and reported.
 
-**Names stay put.** Every name steadysdk assigns is recorded in `.steadysdk/names.lock.json` and reused on the
+**Names stay put.** Every name apisteady assigns is recorded in `.apisteady/names.lock.json` and reused on the
 next run. Concretely:
 
 - A new endpoint whose name collides with an existing one gets the suffix. The existing one keeps its name.
-- If the backend renames an `operationId`, your method keeps its name and steadysdk notes the difference.
-  `steadysdk generate --relock` adopts the new names when you are ready to make that change.
+- If the backend renames an `operationId`, your method keeps its name and apisteady notes the difference.
+  `apisteady generate --relock` adopts the new names when you are ready to make that change.
 - Changing your naming config re-derives names on purpose and lists every rename.
 
-**CI can enforce all of it.** `steadysdk generate --check` exits 1 if the committed SDK is not exactly what the
+**CI can enforce all of it.** `apisteady generate --check` exits 1 if the committed SDK is not exactly what the
 current spec and config produce.
 
 ## API changes and breaking changes
 
-Each run stores the spec it used in `.steadysdk/spec.json`. steadysdk compares that baseline with the current spec,
+Each run stores the spec it used in `.apisteady/spec.json`. apisteady compares that baseline with the current spec,
 so you see what changed in the API itself rather than which generated files changed:
 
 ```console
-$ steadysdk diff
-Comparing sdk/.steadysdk/spec.json → openapi.yaml
+$ apisteady diff
+Comparing sdk/.apisteady/spec.json → openapi.yaml
 ℹ API changes in Swagger Petstore 1.0.0 → 1.1.0: 5 breaking, 7 non-breaking
     ! GET /pets: Query parameter `limit` is now required.
     ! GET /pets/{id}: Path parameter `petId` was renamed to `id`.
@@ -189,8 +189,8 @@ Comparing sdk/.steadysdk/spec.json → openapi.yaml
     ~ API: Default server URL changed from `https://petstore.example.com/v1` to `https://petstore.example.com/v2`.
 ```
 
-`steadysdk generate` prints the same list while it runs, and `generate --check` prints it when it finds the SDK out
-of date. `steadysdk changelog` writes the changes as Markdown for a CHANGELOG, release or pull request. An excerpt
+`apisteady generate` prints the same list while it runs, and `generate --check` prints it when it finds the SDK out
+of date. `apisteady changelog` writes the changes as Markdown for a CHANGELOG, release or pull request. An excerpt
 of the [full example](examples/petstore/next/CHANGELOG.md), generated from [this spec change](examples/petstore/next/openapi.yaml):
 
 ```markdown
@@ -206,12 +206,12 @@ of the [full example](examples/petstore/next/CHANGELOG.md), generated from [this
 ```
 
 ```bash
-steadysdk diff                        # changes since the last generation
-steadysdk diff -i candidate.yaml      # preview a new version of the spec against the SDK
-steadysdk diff old.yaml new.yaml      # any two specs; no config needed
-steadysdk diff --fail-on-breaking     # exit 1 on breaking changes, for CI
-steadysdk diff --json                 # versioned, machine-readable format
-steadysdk changelog --out CHANGES.md  # Markdown (or --json) to a file
+apisteady diff                        # changes since the last generation
+apisteady diff -i candidate.yaml      # preview a new version of the spec against the SDK
+apisteady diff old.yaml new.yaml      # any two specs; no config needed
+apisteady diff --fail-on-breaking     # exit 1 on breaking changes, for CI
+apisteady diff --json                 # versioned, machine-readable format
+apisteady changelog --out CHANGES.md  # Markdown (or --json) to a file
 ```
 
 **What counts as breaking.** A change is breaking when a client built for the old spec, or code written against
@@ -240,8 +240,8 @@ compared yet.
 ## Watch mode
 
 ```console
-$ steadysdk watch
-Using .steadysdkrc.yml
+$ apisteady watch
+Using .apisteadyrc.yml
 ✔ Loaded Swagger Petstore 1.0.0 (OpenAPI 3.0.3): 11 operations, 8 schemas
   …
 ✔ SDK written to sdk (81 ms)
@@ -265,15 +265,15 @@ or a conflict is reported, and watching continues.
 Two checks cover most mistakes:
 
 ```bash
-steadysdk generate --check                 # the committed SDK is exactly what the spec produces
-steadysdk diff --base origin/main --require-bump
+apisteady generate --check                 # the committed SDK is exactly what the spec produces
+apisteady diff --base origin/main --require-bump
 ```
 
 `--base <git-rev>` compares the configured spec with its version at a git revision. It reads that version
 straight from git, including every file it references, so you don't need a second checkout. `--require-bump`
 fails when there are breaking changes but `info.version` is not a new major version. Below 1.0.0, a new minor
 version is enough, as semver tooling treats 0.x. Versions that aren't semver, like `2024-06-01`, only have to
-change. Any argument can also name a file at a revision: `steadysdk diff main:openapi.yaml openapi.yaml`.
+change. Any argument can also name a file at a revision: `apisteady diff main:openapi.yaml openapi.yaml`.
 
 ### GitHub Action
 
@@ -283,13 +283,13 @@ name: SDK
 on: [push, pull_request]
 
 jobs:
-  steadysdk:
+  apisteady:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: euruuuuu/steadysdk@v0.1.0
         with:
-          working-directory: .            # where .steadysdkrc.yml is (or below it)
+          working-directory: .            # where .apisteadyrc.yml is (or below it)
           # require-bump: true            # breaking changes need a new major info.version (default)
           # fail-on-breaking: false       # fail on any breaking change, whatever the version
           # check: true                   # fail when the committed SDK is out of date (default)
@@ -300,7 +300,7 @@ On a pull request, the action compares the spec with the base branch (fetching i
 shallow). On a push, it compares with the commit before the push. It fails the job when the SDK is out of date
 or a breaking change lacks its version bump. The results and the API changelog go to the job summary, and the
 counts are available as the `breaking` and `non-breaking` outputs. A spec that is new in the pull request
-counts as all additions. Until steadysdk is published to npm, the action installs and builds the CLI from its
+counts as all additions. Until apisteady is published to npm, the action installs and builds the CLI from its
 own source on every run. This repository runs the action on its Petstore example in
 [its own CI](.github/workflows/ci.yml).
 
@@ -318,7 +318,7 @@ ignore:
 ```
 
 An entry that matches nothing is reported as a warning, so typos and entries left over from an older spec
-surface. The ignore list also applies to the changes `generate` lists, and to `steadysdk diff` and `changelog`
+surface. The ignore list also applies to the changes `generate` lists, and to `apisteady diff` and `changelog`
 whenever they read the config (that is, unless you pass both spec files). Changes to endpoints the SDK leaves
 out are not reported.
 
@@ -329,18 +329,18 @@ wrapper. To change it (retries, a different HTTP library, tracing), copy it into
 config at your copy:
 
 ```bash
-steadysdk eject runtime          # writes ./steadysdk/runtime.ts and prints the config line to add
+apisteady eject runtime          # writes ./apisteady/runtime.ts and prints the config line to add
 ```
 
 ```yaml
 templates:
-  runtime: ./steadysdk/runtime.ts
+  runtime: ./apisteady/runtime.ts
 ```
 
-steadysdk then uses your copy instead of the built-in runtime. If your copy no longer exports something the generated
+apisteady then uses your copy instead of the built-in runtime. If your copy no longer exports something the generated
 code imports, `generate` lists exactly what is missing. The copy records which version of the built-in runtime it
-started from, so when a newer steadysdk ships a changed runtime, `generate` warns you to review it
-(`steadysdk eject runtime --stdout` prints the current one).
+started from, so when a newer apisteady ships a changed runtime, `generate` warns you to review it
+(`apisteady eject runtime --stdout` prints the current one).
 
 **A header for every file**, such as a license notice:
 
@@ -352,7 +352,7 @@ templates:
 
 ## Naming conventions
 
-Everything is driven by `.steadysdkrc.yml`; [`.steadysdkrc.example.yml`](.steadysdkrc.example.yml) documents every
+Everything is driven by `.apisteadyrc.yml`; [`.apisteadyrc.example.yml`](.apisteadyrc.example.yml) documents every
 option with its default.
 
 ```yaml
@@ -404,7 +404,7 @@ flowchart LR
   gen --> plan["Output planner<br/>(manifest, custom regions, conflicts)"]
   plan --> sdk["sdk/"]
   ignore --> diff["Diff engine<br/>(breaking or not)"]
-  base["Previous spec<br/>(.steadysdk/spec.json or git)"] --> diff
+  base["Previous spec<br/>(.apisteady/spec.json or git)"] --> diff
   diff --> report["Terminal, Markdown, JSON,<br/>CI gate"]
 ```
 
@@ -423,7 +423,7 @@ flowchart LR
 Engineering notes:
 
 - TypeScript 7 and ESM, as npm workspaces: [`packages/core`](packages/core) is the engine and works as a
-  library; [`packages/cli`](packages/cli) is the `steadysdk` command on top of it.
+  library; [`packages/cli`](packages/cli) is the `apisteady` command on top of it.
 - Generated output is deterministic (no timestamps, stable ordering), so regenerating produces small, reviewable
   diffs, and `--check` can compare byte for byte.
 - The test suite (Vitest) covers each module, plus:
@@ -437,14 +437,14 @@ Engineering notes:
 ## CLI
 
 ```
-steadysdk init        [-i spec] [-o dir] [--force]
-steadysdk generate    [-c config] [-i spec] [-o dir] [--dry-run] [--check] [--relock] [--force]
+apisteady init        [-i spec] [-o dir] [--force]
+apisteady generate    [-c config] [-i spec] [-o dir] [--dry-run] [--check] [--relock] [--force]
                       [--no-validate] [--verbose]
-steadysdk watch       [-c config] [-i spec] [-o dir] [--no-validate] [--verbose]
-steadysdk diff        [old] [new] [-c config] [-i spec] [-b git-rev] [--json] [--fail-on-breaking]
+apisteady watch       [-c config] [-i spec] [-o dir] [--no-validate] [--verbose]
+apisteady diff        [old] [new] [-c config] [-i spec] [-b git-rev] [--json] [--fail-on-breaking]
                       [--require-bump] [--no-validate]
-steadysdk changelog   [old] [new] [-c config] [-i spec] [-b git-rev] [--json] [--out file] [--no-validate]
-steadysdk eject       runtime [-c config] [--out file] [--stdout] [--force]
+apisteady changelog   [old] [new] [-c config] [-i spec] [-b git-rev] [--json] [--out file] [--no-validate]
+apisteady eject       runtime [-c config] [--out file] [--stdout] [--force]
 global:               [-C, --cwd dir] [--no-color]
 ```
 
@@ -472,9 +472,9 @@ and a hint.
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | A | Spec loading, model, naming engine, name lock, TypeScript generator, `init` / `generate` | ✅ Done |
-| B | Changelog & drift detection: `steadysdk diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
-| C | Maintenance: custom regions in generated files, ignore lists, template overrides (`steadysdk eject`) | ✅ Done |
-| D | `steadysdk watch`, CI gating on breaking changes without a version bump, GitHub Action | ✅ Done |
+| B | Changelog & drift detection: `apisteady diff` / `changelog`, breaking vs non-breaking, JSON + Markdown | ✅ Done |
+| C | Maintenance: custom regions in generated files, ignore lists, template overrides (`apisteady eject`) | ✅ Done |
+| D | `apisteady watch`, CI gating on breaking changes without a version bump, GitHub Action | ✅ Done |
 | E | Release prep: npm packages, polished `init`, real-world spec suite, Swagger 2.0, webhooks, `v0.1.0` | ✅ Done (npm publish pending) |
 | F | VS Code extension: generate/diff commands, out-of-sync status bar | Next |
 
@@ -490,7 +490,7 @@ npm run test:real-world   # generate + strictly type-check SDKs for GitHub, Stri
 ```
 
 Layout: [`packages/core`](packages/core) holds the engine (spec loading, IR, naming, generators, output
-planning, diff); [`packages/cli`](packages/cli) is the `steadysdk` command.
+planning, diff); [`packages/cli`](packages/cli) is the `apisteady` command.
 
 ## License
 

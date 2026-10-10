@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { SteadySdkError } from '../errors.js';
+import { ApiSteadyError } from '../errors.js';
 
 const run = promisify(execFile);
 
@@ -24,7 +24,7 @@ export async function openRevision(revision: string, near: string): Promise<GitR
   try {
     root = (await run('git', ['-C', dir, 'rev-parse', '--show-toplevel'])).stdout.trim();
   } catch (error) {
-    throw new SteadySdkError('GIT_FAILED', `Cannot read git revision "${revision}": ${dir} is not inside a git repository`, {
+    throw new ApiSteadyError('GIT_FAILED', `Cannot read git revision "${revision}": ${dir} is not inside a git repository`, {
       hint: 'Run this inside the repository that holds the spec, with git installed.',
       cause: error,
     });
@@ -32,8 +32,8 @@ export async function openRevision(revision: string, near: string): Promise<GitR
   try {
     await run('git', ['-C', root, 'rev-parse', '--verify', '--quiet', `${revision}^{commit}`]);
   } catch (error) {
-    throw new SteadySdkError('GIT_REVISION_NOT_FOUND', `Git revision "${revision}" not found`, {
-      hint: 'Fetch it first (e.g. `git fetch origin main`); in GitHub Actions, check out with `fetch-depth: 0` or let the steadysdk action fetch it.',
+    throw new ApiSteadyError('GIT_REVISION_NOT_FOUND', `Git revision "${revision}" not found`, {
+      hint: 'Fetch it first (e.g. `git fetch origin main`); in GitHub Actions, check out with `fetch-depth: 0` or let the apisteady action fetch it.',
       cause: error,
     });
   }
@@ -50,7 +50,7 @@ export async function openRevision(revision: string, near: string): Promise<GitR
         const { stdout } = await run('git', ['-C', root, 'show', `${revision}:${inRepo}`], { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
         return stdout;
       } catch (error) {
-        throw new SteadySdkError('SPEC_NOT_FOUND', `${inRepo} does not exist at git revision "${revision}"`, { cause: error });
+        throw new ApiSteadyError('SPEC_NOT_FOUND', `${inRepo} does not exist at git revision "${revision}"`, { cause: error });
       }
     },
     label: async (file) => `${revision}:${await relative(file)}`,

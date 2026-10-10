@@ -93,7 +93,7 @@ export const namingSchema = z.strictObject({
       uncountable: z.array(z.string()).default([]),
     })
     .prefault({}),
-  /** Keep previously generated names stable across regenerations (`.steadysdk/names.lock.json`). */
+  /** Keep previously generated names stable across regenerations (`.apisteady/names.lock.json`). */
   lock: z.boolean().default(true),
   overrides: z
     .strictObject({
@@ -155,7 +155,7 @@ export const configSchema = z.strictObject({
     .strictObject({
       /** Extension used in relative imports of generated files. `.js` suits Node ESM and bundlers alike. */
       importExtension: z.enum(['.js', '.ts', 'none']).default('.js'),
-      /** Emit `// <steadysdk:custom ...>` regions in generated files; code inside them survives regeneration. */
+      /** Emit `// <apisteady:custom ...>` regions in generated files; code inside them survives regeneration. */
       customRegions: z.boolean().default(true),
     })
     .prefault({}),
@@ -163,7 +163,7 @@ export const configSchema = z.strictObject({
   ignore: ignoreSchema.prefault({}),
   templates: z
     .strictObject({
-      /** Your copy of the HTTP runtime (see `steadysdk eject runtime`), used instead of the built-in one. */
+      /** Your copy of the HTTP runtime (see `apisteady eject runtime`), used instead of the built-in one. */
       runtime: z.string().min(1).optional(),
       /** Comment lines at the top of every generated file, e.g. a license. Placeholders: `{title}`, `{version}`. */
       header: header.optional(),
@@ -172,6 +172,6 @@ export const configSchema = z.strictObject({
   naming: namingSchema.prefault({}),
 });
 
-export type SteadySdkConfigInput = z.input<typeof configSchema>;
-export type SteadySdkConfig = z.output<typeof configSchema>;
+export type ApiSteadyConfigInput = z.input<typeof configSchema>;
+export type ApiSteadyConfig = z.output<typeof configSchema>;
 export type NamingConfig = z.output<typeof namingSchema>;

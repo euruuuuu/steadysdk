@@ -1,5 +1,5 @@
 import type { CaseStyle, NamingConfig } from '../config/schema.js';
-import { SteadySdkError } from '../errors.js';
+import { ApiSteadyError } from '../errors.js';
 import type { Operation, Parameter } from '../ir/model.js';
 import { applyCase, splitWords } from './case.js';
 import { Pluralizer } from './plural.js';
@@ -215,7 +215,7 @@ export class NamingEngine {
 
   private checkOverride(name: string, where: string): string {
     if (!IDENTIFIER.test(name)) {
-      throw new SteadySdkError('NAMING_INVALID', `${where} is "${name}", which is not a valid identifier`);
+      throw new ApiSteadyError('NAMING_INVALID', `${where} is "${name}", which is not a valid identifier`);
     }
     return name;
   }

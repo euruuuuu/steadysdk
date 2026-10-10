@@ -1,4 +1,4 @@
-import type { SteadySdkConfig } from '../config/schema.js';
+import type { ApiSteadyConfig } from '../config/schema.js';
 import type { Diagnostics } from '../diagnostics.js';
 import type { ApiModel, Operation } from '../ir/model.js';
 import { canonicalJson, sha256 } from '../util/hash.js';
@@ -33,7 +33,7 @@ export interface SdkNames {
 
 export interface AssignNamesOptions {
   model: ApiModel;
-  config: Pick<SteadySdkConfig, 'naming' | 'client'>;
+  config: Pick<ApiSteadyConfig, 'naming' | 'client'>;
   /** Names from the previous run. Ignored when it was written under a different naming config. */
   lock?: NameLock | undefined;
   /** Type names the generator itself exports or relies on (runtime classes, globals, ...). */
@@ -53,7 +53,7 @@ export interface AssignNamesResult {
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 /** Fingerprint of everything that influences naming. A change re-derives names instead of using the lock. */
-export function namingConfigHash(config: Pick<SteadySdkConfig, 'naming' | 'client'>): string {
+export function namingConfigHash(config: Pick<ApiSteadyConfig, 'naming' | 'client'>): string {
   return sha256(
     canonicalJson({
       lockVersion: NAME_LOCK_VERSION,

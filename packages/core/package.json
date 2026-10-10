@@ -1,7 +1,7 @@
 {
-  "name": "@steadysdk/core",
+  "name": "@apisteady/core",
   "version": "0.1.0",
-  "description": "Generation, naming and drift-detection engine behind the steadysdk CLI",
+  "description": "Generation, naming and drift-detection engine behind the apisteady CLI",
   "keywords": [
     "openapi",
     "swagger",

@@ -4,11 +4,11 @@ import { z } from 'zod';
 import { canonicalJson } from '../util/hash.js';
 
 /** Bookkeeping directory inside the output directory. Commit it along with the SDK. */
-export const STEADYSDK_DIR = '.steadysdk';
-export const MANIFEST_FILE = `${STEADYSDK_DIR}/manifest.json`;
-export const NAME_LOCK_FILE = `${STEADYSDK_DIR}/names.lock.json`;
+export const APISTEADY_DIR = '.apisteady';
+export const MANIFEST_FILE = `${APISTEADY_DIR}/manifest.json`;
+export const NAME_LOCK_FILE = `${APISTEADY_DIR}/names.lock.json`;
 /** The bundled spec the SDK was last generated from; the baseline for drift detection. */
-export const SPEC_SNAPSHOT_FILE = `${STEADYSDK_DIR}/spec.json`;
+export const SPEC_SNAPSHOT_FILE = `${APISTEADY_DIR}/spec.json`;
 
 export const MANIFEST_VERSION = 1;
 
@@ -16,7 +16,7 @@ const manifestSchema = z.object({
   version: z.literal(MANIFEST_VERSION),
   generator: z.object({ name: z.string(), version: z.string(), target: z.string() }),
   spec: z.object({ title: z.string(), version: z.string(), openapi: z.string(), hash: z.string() }),
-  /** Every file steadysdk owns → sha256 of the content it last wrote. Used to spot hand edits and stale files. */
+  /** Every file apisteady owns → sha256 of the content it last wrote. Used to spot hand edits and stale files. */
   files: z.record(z.string(), z.string()),
 });
 

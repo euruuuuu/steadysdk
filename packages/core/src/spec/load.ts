@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import type { OpenAPIV3, OpenAPIV3_1 } from 'openapi-types';
-import { SteadySdkError } from '../errors.js';
+import { ApiSteadyError } from '../errors.js';
 import { canonicalJson, sha256 } from '../util/hash.js';
 import { openRevision, type GitRevision } from './git.js';
 import { semanticErrors } from './semantic.js';
@@ -42,7 +42,7 @@ const isUrl = (value: string): boolean => /^https?:\/\//i.test(value);
 export async function loadSpec(source: string, options: LoadSpecOptions = {}): Promise<LoadedSpec> {
   const resolved = isUrl(source) ? source : path.resolve(options.cwd ?? process.cwd(), source);
   if (options.revision !== undefined && isUrl(resolved)) {
-    throw new SteadySdkError('SPEC_UNSUPPORTED', `Cannot read ${resolved} from git: it is a URL`, {
+    throw new ApiSteadyError('SPEC_UNSUPPORTED', `Cannot read ${resolved} from git: it is a URL`, {
       hint: 'Git revisions work for specs stored in the repository.',
     });
   }
@@ -51,7 +51,7 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
   if (!isUrl(resolved) && !git) {
     const info = await stat(resolved).catch(() => undefined);
     if (!info?.isFile()) {
-      throw new SteadySdkError('SPEC_NOT_FOUND', `OpenAPI spec not found: ${resolved}`, {
+      throw new ApiSteadyError('SPEC_NOT_FOUND', `OpenAPI spec not found: ${resolved}`, {
         hint: 'Check the `input` path in your config, or pass --input <file>.',
       });
     }
@@ -68,12 +68,12 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
   } catch (error) {
     const unsupported = /^Unsupported (?:OpenAPI|Swagger) version: (\S+?)\.?(?:\s|$)/.exec(errorMessage(error));
     if (unsupported) {
-      throw new SteadySdkError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${unsupported[1]}" in ${label}`, {
-        hint: 'steadysdk supports Swagger 2.0 and OpenAPI 3.0.x / 3.1.x.',
+      throw new ApiSteadyError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${unsupported[1]}" in ${label}`, {
+        hint: 'apisteady supports Swagger 2.0 and OpenAPI 3.0.x / 3.1.x.',
         cause: error,
       });
     }
-    throw new SteadySdkError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${label}`, {
+    throw new ApiSteadyError('SPEC_PARSE_FAILED', `Could not read OpenAPI spec ${label}`, {
       details: [errorMessage(error)],
       hint: 'The file must be valid YAML or JSON, and every external $ref must resolve.',
       cause: error,
@@ -89,15 +89,15 @@ export async function loadSpec(source: string, options: LoadSpecOptions = {}): P
     raw = convertSwagger2(raw);
     document = raw as unknown as OpenApiDocument;
   } else if (typeof raw['swagger'] === 'string') {
-    throw new SteadySdkError('SPEC_UNSUPPORTED', `Swagger ${raw['swagger']} documents are not supported`, {
-      hint: 'steadysdk reads Swagger 2.0 and OpenAPI 3.0 / 3.1.',
+    throw new ApiSteadyError('SPEC_UNSUPPORTED', `Swagger ${raw['swagger']} documents are not supported`, {
+      hint: 'apisteady reads Swagger 2.0 and OpenAPI 3.0 / 3.1.',
     });
   }
   const openapiVersion = typeof raw['openapi'] === 'string' ? raw['openapi'] : '';
   const dialect = openapiVersion.startsWith('3.0.') ? '3.0' : openapiVersion.startsWith('3.1.') ? '3.1' : undefined;
   if (!dialect) {
-    throw new SteadySdkError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${openapiVersion || '(missing)'}"`, {
-      hint: 'steadysdk supports Swagger 2.0 and OpenAPI 3.0.x / 3.1.x.',
+    throw new ApiSteadyError('SPEC_UNSUPPORTED', `Unsupported OpenAPI version "${openapiVersion || '(missing)'}"`, {
+      hint: 'apisteady supports Swagger 2.0 and OpenAPI 3.0.x / 3.1.x.',
     });
   }
   if ((options.validate ?? true) && !convertedFrom) await validate(document, label, semanticErrors);
@@ -115,7 +115,7 @@ async function validate(document: OpenApiDocument, label: string, extraChecks: (
     details = validationDetails(error);
   }
   if (details.length > 0) {
-    throw new SteadySdkError('SPEC_INVALID', `OpenAPI spec failed validation: ${label}`, {
+    throw new ApiSteadyError('SPEC_INVALID', `OpenAPI spec failed validation: ${label}`, {
       details,
       hint: 'Fix the reported problems, or set `validate: false` in your config to generate anyway.',
     });

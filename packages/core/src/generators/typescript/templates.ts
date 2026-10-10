@@ -1,16 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import type { Diagnostics } from '../../diagnostics.js';
-import { SteadySdkError } from '../../errors.js';
+import { ApiSteadyError } from '../../errors.js';
 import { sha256 } from '../../util/hash.js';
 
 const BUILTIN_RUNTIME = new URL('../../../templates/typescript/runtime.ts', import.meta.url);
 const FINGERPRINT = /built-in runtime template \(fingerprint ([0-9a-f]{12})\)/;
 
-/** Templates `steadysdk eject` can copy out for customization. */
+/** Templates `apisteady eject` can copy out for customization. */
 export const TEMPLATE_NAMES = ['runtime'] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
-/** The fetch-based HTTP runtime shipped with steadysdk. */
+/** The fetch-based HTTP runtime shipped with apisteady. */
 export function builtinRuntime(): Promise<string> {
   return readFile(BUILTIN_RUNTIME, 'utf8');
 }
@@ -19,9 +19,9 @@ export function builtinRuntime(): Promise<string> {
 export async function ejectTemplate(_name: TemplateName): Promise<string> {
   const source = await builtinRuntime();
   return [
-    `// Your copy of the steadysdk HTTP runtime, ejected from the built-in runtime template (fingerprint ${fingerprint(source)}).`,
-    '// While `templates.runtime` points at this file, steadysdk copies it to generated/runtime.ts on every run.',
-    '// Keep the exports the generated code imports: `steadysdk generate` lists any that go missing.',
+    `// Your copy of the apisteady HTTP runtime, ejected from the built-in runtime template (fingerprint ${fingerprint(source)}).`,
+    '// While `templates.runtime` points at this file, apisteady copies it to generated/runtime.ts on every run.',
+    '// Keep the exports the generated code imports: `apisteady generate` lists any that go missing.',
     '',
     source,
   ].join('\n');
@@ -38,8 +38,8 @@ export async function loadRuntime(overridePath: string | undefined, diagnostics:
   try {
     source = await readFile(overridePath, 'utf8');
   } catch (error) {
-    throw new SteadySdkError('TEMPLATE_NOT_FOUND', `Runtime template not found: ${overridePath}`, {
-      hint: 'Create it with `steadysdk eject runtime`, or remove `templates.runtime` from the config.',
+    throw new ApiSteadyError('TEMPLATE_NOT_FOUND', `Runtime template not found: ${overridePath}`, {
+      hint: 'Create it with `apisteady eject runtime`, or remove `templates.runtime` from the config.',
       cause: error,
     });
   }
@@ -49,7 +49,7 @@ export async function loadRuntime(overridePath: string | undefined, diagnostics:
     diagnostics.warn(
       'TEMPLATE_OUTDATED',
       `templates.runtime was ejected from another version of the built-in runtime (fingerprint ${recorded}, now ${current}). ` +
-        `Compare it with \`steadysdk eject runtime --stdout\`, merge what you need, then update the fingerprint in its first line.`,
+        `Compare it with \`apisteady eject runtime --stdout\`, merge what you need, then update the fingerprint in its first line.`,
       overridePath,
     );
   }

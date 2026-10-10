@@ -1,4 +1,4 @@
-# steadysdk config for the Petstore example. Run from the repo root: npm run examples
+# apisteady config for the Petstore example. Run from the repo root: npm run examples
 input: ./openapi.yaml
 output: ./sdk
 

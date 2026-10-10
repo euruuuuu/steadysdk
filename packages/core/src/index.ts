@@ -1,4 +1,4 @@
-export { SteadySdkError, isSteadySdkError, type SteadySdkErrorCode } from './errors.js';
+export { ApiSteadyError, isApiSteadyError, type ApiSteadyErrorCode } from './errors.js';
 export { Diagnostics, type Diagnostic, type DiagnosticLevel } from './diagnostics.js';
 export { loadSpec, type LoadedSpec, type LoadSpecOptions, type OpenApiDocument } from './spec/load.js';
 export { buildModel } from './ir/build.js';
@@ -12,8 +12,8 @@ export {
   type CaseStyle,
   type NamingConfig,
   type IgnoreConfig,
-  type SteadySdkConfig,
-  type SteadySdkConfigInput,
+  type ApiSteadyConfig,
+  type ApiSteadyConfigInput,
 } from './config/schema.js';
 export { CONFIG_FILE_NAMES, findConfigFile, loadConfig, parseConfig, type LoadConfigOptions, type ResolvedConfig } from './config/load.js';
 export { applyCase, splitWords, toCase, camelCase, pascalCase } from './naming/case.js';
@@ -34,7 +34,7 @@ export {
   MANIFEST_FILE,
   NAME_LOCK_FILE,
   SPEC_SNAPSHOT_FILE,
-  STEADYSDK_DIR,
+  APISTEADY_DIR,
   readManifest,
   type Manifest,
   type ReadManifestResult,
@@ -42,4 +42,4 @@ export {
 export { planOutput, applyPlan, hasChanges, describeConflict, type OutputPlan, type PlannedChange, type FileAction, type Conflict } from './output/plan.js';
 export { parseRegions, stripRegions, mergeRegions, type ParsedRegions, type MergedRegions } from './output/regions.js';
 export { applyIgnore } from './ir/ignore.js';
-export { STEADYSDK_VERSION } from './version.js';
+export { APISTEADY_VERSION } from './version.js';

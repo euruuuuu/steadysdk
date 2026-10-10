@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { Argument, Command, CommanderError } from 'commander';
-import { STEADYSDK_VERSION, TEMPLATE_NAMES } from '@steadysdk/core';
+import { APISTEADY_VERSION, TEMPLATE_NAMES } from '@apisteady/core';
 import { changelogCommand, type ChangelogCommandOptions } from './commands/changelog.js';
 import { diffCommand, type DiffCommandOptions } from './commands/diff.js';
 import { ejectCommand, type EjectCommandOptions } from './commands/eject.js';
@@ -17,9 +17,9 @@ interface GlobalOptions {
 /** Runs the CLI in-process and resolves to the exit code. */
 export async function run(argv: readonly string[], io: Io = defaultIo()): Promise<number> {
   let exitCode = 0;
-  const program = new Command('steadysdk')
+  const program = new Command('apisteady')
     .description('Generate and maintain typed API client SDKs from OpenAPI specs')
-    .version(STEADYSDK_VERSION, '-v, --version')
+    .version(APISTEADY_VERSION, '-v, --version')
     .option('-C, --cwd <dir>', 'run as if started in <dir>')
     .option('--no-color', 'disable colored output')
     .showHelpAfterError()
@@ -47,7 +47,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
 
   program
     .command('init')
-    .description('create a .steadysdkrc.yml config in the current directory')
+    .description('create a .apisteadyrc.yml config in the current directory')
     .option('-i, --input <spec>', 'path or URL of the OpenAPI document (detected when omitted)')
     .option('-o, --output <dir>', 'output directory for the SDK', './sdk')
     .option('-f, --force', 'overwrite an existing config')
@@ -57,7 +57,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .command('generate')
     .alias('gen')
     .description('generate the SDK, keeping your own files and existing names intact')
-    .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
+    .option('-c, --config <file>', 'config file (default: nearest .apisteadyrc.yml)')
     .option('-i, --input <spec>', 'OpenAPI document, overriding the config')
     .option('-o, --output <dir>', 'output directory, overriding the config')
     .option('--no-validate', 'skip OpenAPI validation')
@@ -71,7 +71,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
   program
     .command('watch')
     .description('generate, then regenerate whenever the spec, a file it references or the config changes')
-    .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
+    .option('-c, --config <file>', 'config file (default: nearest .apisteadyrc.yml)')
     .option('-i, --input <spec>', 'OpenAPI document, overriding the config')
     .option('-o, --output <dir>', 'output directory, overriding the config')
     .option('--no-validate', 'skip OpenAPI validation')
@@ -82,7 +82,7 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     command
       .argument('[old]', 'spec to compare from (default: the spec the SDK was last generated from); <git-rev>:<path> reads it from git')
       .argument('[new]', 'spec to compare to (default: the configured input)')
-      .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
+      .option('-c, --config <file>', 'config file (default: nearest .apisteadyrc.yml)')
       .option('-i, --input <spec>', 'use this spec instead of the configured input as [new]')
       .option('-b, --base <git-rev>', 'compare against the configured spec as it is at this git revision, e.g. origin/main')
       .option('--no-validate', 'skip OpenAPI validation')
@@ -103,8 +103,8 @@ export async function run(argv: readonly string[], io: Io = defaultIo()): Promis
     .command('eject')
     .description('copy a built-in template into your project to customize it')
     .addArgument(new Argument('<template>', 'template to copy').choices(TEMPLATE_NAMES))
-    .option('-c, --config <file>', 'config file (default: nearest .steadysdkrc.yml)')
-    .option('--out <file>', 'where to write it (default: templates.<template> from the config, or ./steadysdk/<template>.ts)')
+    .option('-c, --config <file>', 'config file (default: nearest .apisteadyrc.yml)')
+    .option('--out <file>', 'where to write it (default: templates.<template> from the config, or ./apisteady/<template>.ts)')
     .option('--stdout', 'print it instead, e.g. to compare with your copy')
     .option('-f, --force', 'replace an existing file')
     .action(action<EjectCommandOptions>(ejectCommand));

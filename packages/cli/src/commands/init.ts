@@ -1,6 +1,6 @@
 import { readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { buildModel, loadSpec, parseConfig, SteadySdkError } from '@steadysdk/core';
+import { buildModel, loadSpec, parseConfig, ApiSteadyError } from '@apisteady/core';
 import { parse as parseYaml } from 'yaml';
 import type { Ui } from '../ui.js';
 
@@ -10,24 +10,24 @@ export interface InitCommandOptions {
   force?: boolean;
 }
 
-export const CONFIG_FILE = '.steadysdkrc.yml';
+export const CONFIG_FILE = '.apisteadyrc.yml';
 
 const SPEC_CANDIDATES = /^(openapi|swagger|api|spec)([.-][\w.-]+)?\.(ya?ml|json)$/i;
 /** Where specs usually live, besides the project root. */
 const SPEC_DIRECTORIES = ['api', 'apis', 'spec', 'specs', 'openapi', 'docs', 'schema'];
-const EXAMPLE_CONFIG = 'https://github.com/euruuuuu/steadysdk/blob/main/.steadysdkrc.example.yml';
+const EXAMPLE_CONFIG = 'https://github.com/euruuuuu/steadysdk/blob/main/.apisteadyrc.example.yml';
 
 export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<number> {
   const target = path.join(ui.io.cwd, CONFIG_FILE);
   if (!options.force && (await stat(target).catch(() => undefined))) {
-    throw new SteadySdkError('CONFIG_EXISTS', `${CONFIG_FILE} already exists`, { hint: 'Pass --force to overwrite it.' });
+    throw new ApiSteadyError('CONFIG_EXISTS', `${CONFIG_FILE} already exists`, { hint: 'Pass --force to overwrite it.' });
   }
 
   const candidates = options.input === undefined ? await detectSpecs(ui.io.cwd) : [];
   const input = options.input ?? candidates[0];
   const output = options.output ?? './sdk';
   const content = configTemplate(input ?? './openapi.yaml', output);
-  parseConfig(parseYaml(content), 'init template'); // never write a config steadysdk itself would reject
+  parseConfig(parseYaml(content), 'init template'); // never write a config apisteady itself would reject
 
   await writeFile(target, content, 'utf8');
   ui.success(`Created ${ui.c.bold(CONFIG_FILE)}`);
@@ -41,13 +41,13 @@ export async function initCommand(ui: Ui, options: InitCommandOptions): Promise<
   }
 
   // When run through npx, suggest commands that work the same way.
-  const cli = process.env['npm_command'] === 'exec' ? 'npx steadysdk' : 'steadysdk';
+  const cli = process.env['npm_command'] === 'exec' ? 'npx apisteady' : 'apisteady';
   ui.line();
   ui.line('Next steps:');
   ui.line(`  1. Review ${CONFIG_FILE}: naming rules, grouping, parts of the API to leave out`);
   ui.line(`     ${ui.c.dim(`Every option: ${EXAMPLE_CONFIG}`)}`);
   ui.line(`  2. Generate the SDK:         ${ui.c.cyan(`${cli} generate`)}`);
-  ui.line(`  3. Commit ${output.replace(/^\.\//, '')}/, including its .steadysdk/ folder (it keeps names stable)`);
+  ui.line(`  3. Commit ${output.replace(/^\.\//, '')}/, including its .apisteady/ folder (it keeps names stable)`);
   ui.line(`  4. Keep it in sync in CI:    ${ui.c.cyan(`${cli} generate --check`)}`);
   ui.line();
   ui.line(ui.c.dim(`While you edit the spec, ${cli} watch regenerates on every save.`));
@@ -84,13 +84,13 @@ async function describeSpec(ui: Ui, input: string): Promise<string | undefined> 
 }
 
 function configTemplate(input: string, output: string): string {
-  return `# steadysdk configuration. Paths are relative to this file.
-# Every option is documented in .steadysdkrc.example.yml in the steadysdk repository.
+  return `# apisteady configuration. Paths are relative to this file.
+# Every option is documented in .apisteadyrc.example.yml in the apisteady repository.
 
 # OpenAPI 3.0 / 3.1 document: YAML or JSON, file path or URL.
 input: ${yamlString(input)}
 
-# Where the SDK goes. steadysdk owns <output>/generated/ and .steadysdk/; everything else there is yours.
+# Where the SDK goes. apisteady owns <output>/generated/ and .apisteady/; everything else there is yours.
 output: ${yamlString(output)}
 
 client:
@@ -110,7 +110,7 @@ naming:
     # suffix: Dto
   parameters:
     case: camel
-  # Keep names stable across regenerations (.steadysdk/names.lock.json).
+  # Keep names stable across regenerations (.apisteady/names.lock.json).
   lock: true
   overrides:
     operations: {}        # "GET /users/{id}": fetchUser   or   listPets: getAllPets

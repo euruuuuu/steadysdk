@@ -1,7 +1,7 @@
 import { lowerFirst } from './text.js';
 import type { ApiDiff, Change } from './types.js';
 
-/** `steadysdk diff --json` / `steadysdk changelog --json`: stable key order, trailing newline. */
+/** `apisteady diff --json` / `apisteady changelog --json`: stable key order, trailing newline. */
 export function serializeDiff(diff: ApiDiff): string {
   return `${JSON.stringify(diff, null, 2)}\n`;
 }
